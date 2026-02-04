@@ -1,73 +1,55 @@
 # 🤖 AI Agent Dashboard
 
-A comprehensive dashboard for managing multiple AI agents, channels, skills, and external accounts. Built on Moltbot Gateway with real-time monitoring and control.
+A comprehensive dashboard for managing your AI agents, channels, skills, and external accounts. Built on Moltbot/OpenClaw architecture.
 
 ## Features
 
-### 🧠 Agent Management
-- View and manage multiple AI agents
-- Configure agent settings and capabilities
-- Monitor agent performance and activity
-- Switch between different agents seamlessly
-
-### 📱 Channel Management  
-- Connect/disconnect messaging platforms (WhatsApp, Telegram, Discord, iMessage, etc.)
-- Configure channel-specific settings and permissions
-- View channel status and connection health
-- Manage group chat settings and mention rules
-
-### 🔧 Skills & Jobs Management
-- Install, update, and remove agent skills
-- Manage cron jobs and scheduled tasks
-- View job history and execution logs
-- Create new automation workflows
-
-### 🔐 Account Integration
-- Securely store external account credentials (email, social media, APIs)
-- Manage which agents have access to which accounts
-- View account connection status and permissions
-- Audit trail of account usage
-
-### 💬 Chat Interface
-- Direct real-time chat with your primary AI agent
-- View conversation history and context
-- Send commands and receive responses instantly
-- Multi-agent chat switching
-
-### 📊 System Monitoring
-- Real-time system status and health metrics
-- Resource usage monitoring (CPU, memory, network)
-- Log viewing and filtering
-- Performance analytics and insights
+- **Agent Management**: View and configure multiple AI agents
+- **Channel Management**: Connect/disconnect messaging platforms (WhatsApp, Telegram, Discord, etc.)
+- **Job & Skill Management**: Schedule cron jobs and manage agent skills
+- **Account Integration**: Securely store and manage external account credentials
+- **Real-time Chat**: Direct chat interface with your AI agents
+- **System Monitoring**: View logs, status, and performance metrics
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    AI Agent Dashboard                           │
+│                    AI Agent Dashboard (React)                   │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │              React Frontend                             │   │
+│  │              Web Interface                               │   │
 │  │  • Agent Management                                     │   │
 │  │  • Channel Configuration                                │   │
-│  │  • Skills & Jobs                                        │   │
-│  │  │  • Account Integration                               │   │
-│  │  • Real-time Chat                                       │   │
+│  │  • Job/Skill Management                                 │   │
+│  │  • Account Credentials                                  │   │
+│  │  • Live Chat Interface                                  │   │
 │  │  • System Monitoring                                    │   │
 │  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                                               │
-                                              │ WebSocket/API
+                                              │ HTTP API
+                                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Local API Server                             │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Proxy Layer                                 │   │
+│  │  • Routes requests to Moltbot Gateway                   │   │
+│  │  • Handles secure credential storage                     │   │
+│  │  • Provides local development convenience                │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                                              │
+                                              │ WebSocket/HTTP
                                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Moltbot Gateway                              │
-│  ┌──────────┐    Session Management    ┌──────────────────────┐ │
-│  │ Channels │◄────────────────────────►│      Agents          │ │
-│  └──────────┘    Message Routing       └──────────────────────┘ │
-│        ▲                                   ▲                   │
-│        │                                   │                   │
-│  ┌──────────┐    External Services    ┌──────────────────────┐ │
-│  │ Accounts │◄────────────────────────►│      Skills          │ │
-│  └──────────┘    Job Scheduling       └──────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Core AI Agent Platform                      │   │
+│  │  • Manages agent sessions                               │   │
+│  │  │  • Handles channel connections                       │   │
+│  │  • Executes cron jobs and skills                        │   │
+│  │  • Provides secure credential management                 │   │
+│  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,12 +61,14 @@ A comprehensive dashboard for managing multiple AI agents, channels, skills, and
 # Install dependencies
 npm install
 
-# Start development server
+# Start both API server and React dashboard
 npm run dev
 
 # Or run separately:
-npm run dev:api      # Local API proxy (port 8787)
+npm run dev:api      # Local API server (port 8787)
 npm run dev:client   # React dashboard (port 5173)
+
+# Access the dashboard at http://localhost:5173
 ```
 
 ### Build for Production
@@ -93,23 +77,22 @@ npm run dev:client   # React dashboard (port 5173)
 npm run build
 ```
 
-## Deployment
+## Deployment Options
 
-### Cloudflare Pages (Recommended)
+### Local Network Access
+The dashboard is designed to run locally alongside your Moltbot Gateway. For network access:
 
-1. Go to Cloudflare Dashboard → Pages
-2. Create a new project
-3. Connect your Git repository
-4. Settings:
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-   - Root directory: `/` (or `/fb-messenger-project` if in monorepo)
+1. **Tailscale**: Connect via Tailscale for secure remote access
+2. **Local Network**: Access via your machine's local IP address
+3. **SSH Tunnel**: Create an SSH tunnel for remote access
 
-### Direct Integration with Moltbot
+### Cloudflare Pages (Advanced)
+You can deploy the static frontend to Cloudflare Pages, but you'll need to:
+- Configure `VITE_MOLTBOT_GATEWAY_URL` to point to your Moltbot instance
+- Ensure your Moltbot Gateway is accessible from the internet
+- Handle CORS and security appropriately
 
-The dashboard automatically connects to your local Moltbot Gateway at:
-- **Default**: `http://localhost:18789`
-- **Custom**: Set `VITE_MOLTBOT_URL` environment variable
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 ## Configuration
 
@@ -117,61 +100,90 @@ The dashboard automatically connects to your local Moltbot Gateway at:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_MOLTBOT_URL` | `http://localhost:18789` | Moltbot Gateway URL |
-| `VITE_API_KEY` | (auto-generated) | Dashboard API key for security |
+| `VITE_MOLTBOT_GATEWAY_URL` | `http://localhost:18789` | URL of your Moltbot Gateway |
+| `VITE_API_PORT` | `8787` | Port for local API server |
+| `ACCOUNTS_STORAGE_PATH` | `./data/accounts.json` | Path for secure credential storage |
 
 ### Security
 
-- The dashboard uses Moltbot's built-in authentication
-- All credential storage is encrypted and secure
-- API keys are required for dashboard access
-- HTTPS is enforced in production
+- **Credential Storage**: External account credentials are stored locally in encrypted format
+- **API Authentication**: The dashboard uses Moltbot's built-in authentication
+- **Local Only**: By default, the dashboard only connects to local Moltbot instances for security
 
 ## Project Structure
 
 ```
 ai-agent-dashboard/
 ├── dist/                    # Production build output
+├── data/                    # Secure credential storage
+│   └── accounts.json        # Encrypted account credentials
 ├── public/                  # Static assets
 ├── scripts/
-│   ├── local-api-proxy.js   # Local development API proxy
-│   └── setup.js            # Initial setup script
+│   └── local-api-server.js  # Local development API proxy
 ├── src/
-│   ├── components/         # React components
-│   │   ├── agents/         # Agent management components
-│   │   ├── channels/       # Channel management components  
-│   │   ├── skills/         # Skills and jobs components
-│   │   ├── accounts/       # Account integration components
-│   │   ├── chat/           # Chat interface components
-│   │   └── monitoring/     # System monitoring components
-│   ├── App.jsx             # Main application component
-│   ├── App.css             # Application styles
-│   ├── main.jsx            # Entry point
-│   └── index.css           # Global styles
-├── _headers                # Cloudflare Pages headers
-├── _redirects              # SPA routing for Pages
-├── index.html              # HTML template
+│   ├── components/          # Dashboard components
+│   │   ├── AccountManagement.jsx
+│   │   ├── AgentManagement.jsx
+│   │   ├── ChannelManagement.jsx
+│   │   ├── ChatInterface.jsx
+│   │   ├── JobManagement.jsx
+│   │   └── SystemMonitoring.jsx
+│   ├── services/
+│   │   └── moltbotApi.js    # Moltbot Gateway API integration
+│   ├── App.jsx              # Main application component
+│   ├── App.css              # Application styles
+│   └── main.jsx             # Entry point
+├── _headers                 # Cloudflare Pages security headers
+├── _redirects               # SPA routing for Pages
+├── index.html               # HTML template
 ├── package.json
 ├── vite.config.js
-└── README.md
+├── README.md
+└── DEPLOYMENT.md
 ```
 
-## API Integration
+## Usage
 
-The dashboard communicates with Moltbot Gateway using:
+1. **Start Moltbot Gateway** (if not already running)
+2. **Start the dashboard**: `npm run dev`
+3. **Open browser**: Navigate to `http://localhost:5173`
+4. **Configure channels**: Connect your messaging platforms
+5. **Manage agents**: View and configure your AI agents
+6. **Set up jobs**: Schedule automation tasks
+7. **Add accounts**: Securely store external service credentials
+8. **Chat directly**: Use the built-in chat interface
 
-- **WebSocket**: Real-time communication and chat
-- **REST API**: Configuration and management operations
-- **Event Stream**: Real-time updates and notifications
+## Security Considerations
 
-All API endpoints are documented in the [Moltbot API documentation](https://docs.molt.bot).
+1. **Local Storage**: Account credentials are stored locally and encrypted
+2. **Network Access**: By default, only connects to localhost for security
+3. **Authentication**: Uses Moltbot's existing auth system
+4. **CORS**: Proper CORS headers prevent unauthorized access
+5. **HTTPS**: Always use HTTPS in production environments
 
-## Development Notes
+## Troubleshooting
 
-- The local API proxy (`scripts/local-api-proxy.js`) forwards requests to Moltbot Gateway
-- Use browser developer tools to debug WebSocket connections
-- The dashboard automatically detects Moltbot Gateway status
-- All sensitive operations require authentication
+### Blank Screen
+- Ensure Moltbot Gateway is running on port 18789
+- Check browser console for connection errors
+- Verify local API server is running on port 8787
+
+### Connection Issues
+- Confirm Moltbot Gateway URL is correct
+- Check firewall settings if accessing over network
+- Verify authentication tokens are valid
+
+### Missing Features
+- Ensure you're running the latest version of Moltbot
+- Check that required channels are properly configured
+- Verify agent permissions and capabilities
+
+## Development
+
+- **Hot Reload**: Both frontend and API server support hot reloading
+- **API Mocking**: Easy to mock Moltbot APIs for offline development
+- **Component Library**: Reusable components for consistent UI
+- **Type Safety**: TypeScript-ready structure (can be added easily)
 
 ## License
 
