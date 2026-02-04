@@ -1,405 +1,427 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 
-const WS_URL = `ws://${window.location.hostname}:3001/ws`;
-const API_URL = `http://${window.location.hostname}:3001/api`;
+// Configuration - Update this for production
+const getApiUrl = () => {
+  // In development, use local worker
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:8787';
+  }
+  // In production, use the worker URL (set via environment or config)
+  return window.FRED_API_URL || 'https://fred-messenger-api.workers.dev';
+};
+
+const API_URL = getApiUrl();
 
 function App() {
-  // State
-  const [status, setStatus] = useState({
-    connected: false,
-    loggedIn: false,
-    loading: false,
-    error: null,
-    userName: null,
-    loginStep: 'idle'
-  });
-  const [conversations, setConversations] = useState([]);
+  const [status, setStatus] = useState('loading');
+  const [config, setConfig] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [selectedThread, setSelectedThread] = useState(null);
-  const [messageInput, setMessageInput] = useState('');
-  const [loginForm, setLoginForm] = useState({ email: '', password: '', code: '' });
-  const [screenshot, setScreenshot] = useState(null);
-  const [autoReply, setAutoReply] = useState(false);
-  const [wsConnected, setWsConnected] = useState(false);
-  
-  const wsRef = useRef(null);
-  const messagesEndRef = useRef(null);
+  const [stats, setStats] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [apiKey, setApiKey] = useState(localStorage.getItem('fred_api_key') || '');
+  const [error, setError] = useState(null);
+  const [setupMode, setSetupMode] = useState(false);
+  const [newApiKey, setNewApiKey] = useState('');
 
-  // WebSocket connection
-  useEffect(() => {
-    const connectWebSocket = () => {
-      const ws = new WebSocket(WS_URL);
+  // API call helper
+  const apiCall = useCallback(async (endpoint, options = {}) => {
+    try {
+      const response = await fetch(`${API_URL}/api/${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+          ...options.headers,
+        },
+      });
       
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        setWsConnected(true);
-        ws.send(JSON.stringify({ action: 'getStatus' }));
-      };
-      
-      ws.onmessage = (event) => {
-        const { type, data } = JSON.parse(event.data);
-        
-        switch (type) {
-          case 'status':
-            setStatus(data);
-            break;
-          case 'conversations':
-            setConversations(data);
-            break;
-          case 'messages':
-            if (data.threadId === selectedThread) {
-              setMessages(data.messages);
-            }
-            break;
-          case 'newMessage':
-            console.log('New message:', data);
-            break;
-          case 'screenshot':
-            setScreenshot(data.screenshot);
-            break;
-          case 'error':
-            console.error('Server error:', data.message);
-            break;
-          default:
-            console.log('Unknown message type:', type);
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('Invalid API key');
+          return null;
         }
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        setWsConnected(false);
-        // Reconnect after delay
-        setTimeout(connectWebSocket, 3000);
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-      
-      wsRef.current = ws;
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+        throw new Error(`API error: ${response.status}`);
       }
-    };
-  }, [selectedThread]);
+      
+      return await response.json();
+    } catch (err) {
+      console.error('API call failed:', err);
+      setError(err.message);
+      return null;
+    }
+  }, [apiKey]);
 
-  // Scroll to bottom of messages
+  // Load initial data
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const loadData = async () => {
+      setError(null);
+      
+      // Check worker health
+      try {
+        const health = await fetch(`${API_URL}/health`);
+        if (!health.ok) {
+          setStatus('offline');
+          setError('Worker is offline');
+          return;
+        }
+      } catch (err) {
+        setStatus('offline');
+        setError('Cannot connect to worker');
+        return;
+      }
 
-  // API calls
-  const startLogin = async () => {
-    try {
-      const res = await fetch(`${API_URL}/login/start`, { method: 'POST' });
-      const data = await res.json();
-      if (data.screenshot) setScreenshot(data.screenshot);
-    } catch (error) {
-      console.error('Start login error:', error);
-    }
-  };
+      // Load config
+      const configData = await apiCall('config');
+      if (configData) {
+        setConfig(configData.config);
+      }
 
-  const submitCredentials = async () => {
-    try {
-      const res = await fetch(`${API_URL}/login/credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginForm.email, password: loginForm.password })
-      });
-      const data = await res.json();
-      if (data.screenshot) setScreenshot(data.screenshot);
-    } catch (error) {
-      console.error('Credentials error:', error);
-    }
-  };
+      // Load stats
+      const statsData = await apiCall('stats');
+      if (statsData) {
+        setStats(statsData.stats);
+      }
 
-  const submit2FA = async () => {
-    try {
-      const res = await fetch(`${API_URL}/login/2fa`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: loginForm.code })
-      });
-      const data = await res.json();
-      if (data.screenshot) setScreenshot(data.screenshot);
-    } catch (error) {
-      console.error('2FA error:', error);
-    }
-  };
+      // Load messages
+      const messagesData = await apiCall('messages?limit=50');
+      if (messagesData) {
+        setMessages(messagesData.messages);
+      }
 
-  const logout = async () => {
-    try {
-      await fetch(`${API_URL}/logout`, { method: 'POST' });
-      setSelectedThread(null);
-      setMessages([]);
-      setConversations([]);
-      setScreenshot(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+      // Load conversations
+      const convData = await apiCall('conversations');
+      if (convData) {
+        setConversations(convData.conversations);
+      }
 
-  const sendMessage = async () => {
-    if (!messageInput.trim() || !selectedThread) return;
+      setStatus('connected');
+    };
+
+    loadData();
     
-    try {
-      await fetch(`${API_URL}/messages/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId: selectedThread, text: messageInput })
-      });
-      setMessageInput('');
-    } catch (error) {
-      console.error('Send message error:', error);
+    // Refresh every 30 seconds
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [apiCall]);
+
+  // Update config
+  const updateConfig = async (updates) => {
+    const result = await apiCall('config', {
+      method: 'POST',
+      body: JSON.stringify(updates),
+    });
+    
+    if (result) {
+      setConfig(result.config);
     }
   };
 
-  const selectConversation = async (threadId) => {
-    setSelectedThread(threadId);
-    try {
-      await fetch(`${API_URL}/navigate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId })
-      });
-    } catch (error) {
-      console.error('Navigate error:', error);
+  // Setup API key
+  const setupApiKey = async () => {
+    if (!newApiKey) return;
+    
+    const response = await fetch(`${API_URL}/api/setup-key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: newApiKey }),
+    });
+    
+    if (response.ok) {
+      setApiKey(newApiKey);
+      localStorage.setItem('fred_api_key', newApiKey);
+      setSetupMode(false);
+      setNewApiKey('');
     }
   };
 
-  const toggleAutoReply = async () => {
-    const newState = !autoReply;
-    setAutoReply(newState);
-    try {
-      await fetch(`${API_URL}/auto-reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: newState })
-      });
-    } catch (error) {
-      console.error('Toggle auto-reply error:', error);
-    }
+  // Save API key to localStorage
+  const saveApiKey = () => {
+    localStorage.setItem('fred_api_key', apiKey);
+    window.location.reload();
   };
 
-  const refreshScreenshot = async () => {
-    try {
-      const res = await fetch(`${API_URL}/screenshot`);
-      const data = await res.json();
-      if (data.screenshot) setScreenshot(data.screenshot);
-    } catch (error) {
-      console.error('Screenshot error:', error);
-    }
+  // Format timestamp
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleString();
   };
 
-  // Render login form
-  const renderLogin = () => (
-    <div className="login-container">
-      <div className="login-card">
-        <div className="login-header">
-          <h2>🤖 Fred Messenger</h2>
-          <p>Sign in with your Facebook account</p>
+  // Render dashboard tab
+  const renderDashboard = () => (
+    <div className="dashboard">
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon">📨</div>
+          <div className="stat-info">
+            <div className="stat-value">{stats?.total?.messagesReceived || 0}</div>
+            <div className="stat-label">Total Messages</div>
+          </div>
         </div>
-
-        {status.loginStep === 'idle' || status.loginStep === null ? (
-          <button 
-            className="start-btn"
-            onClick={startLogin}
-            disabled={status.loading}
-          >
-            {status.loading ? 'Starting...' : 'Start Login'}
-          </button>
-        ) : status.loginStep === 'credentials' ? (
-          <div className="login-form">
-            <input
-              type="email"
-              placeholder="Email or Phone"
-              value={loginForm.email}
-              onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-              className="login-input"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={loginForm.password}
-              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              className="login-input"
-            />
-            <button 
-              className="submit-btn"
-              onClick={submitCredentials}
-              disabled={status.loading || !loginForm.email || !loginForm.password}
-            >
-              {status.loading ? 'Logging in...' : 'Log In'}
-            </button>
+        
+        <div className="stat-card">
+          <div className="stat-icon">🤖</div>
+          <div className="stat-info">
+            <div className="stat-value">{stats?.total?.responsesSent || 0}</div>
+            <div className="stat-label">Fred Responses</div>
           </div>
-        ) : status.loginStep === '2fa' ? (
-          <div className="login-form">
-            <p className="twofa-notice">Enter your 2FA verification code</p>
-            <input
-              type="text"
-              placeholder="Verification Code"
-              value={loginForm.code}
-              onChange={(e) => setLoginForm({ ...loginForm, code: e.target.value })}
-              className="login-input"
-              autoComplete="one-time-code"
-            />
-            <button 
-              className="submit-btn"
-              onClick={submit2FA}
-              disabled={status.loading || !loginForm.code}
-            >
-              {status.loading ? 'Verifying...' : 'Verify'}
-            </button>
+        </div>
+        
+        <div className="stat-card">
+          <div className="stat-icon">📅</div>
+          <div className="stat-info">
+            <div className="stat-value">{stats?.today?.messagesReceived || 0}</div>
+            <div className="stat-label">Today's Messages</div>
           </div>
-        ) : null}
-
-        {status.error && (
-          <div className="error-message">{status.error}</div>
-        )}
-
-        {screenshot && (
-          <div className="screenshot-preview">
-            <h4>Browser Preview</h4>
-            <img src={screenshot} alt="Browser" />
-            <button onClick={refreshScreenshot} className="refresh-btn">
-              🔄 Refresh
-            </button>
+        </div>
+        
+        <div className="stat-card">
+          <div className="stat-icon">✨</div>
+          <div className="stat-info">
+            <div className="stat-value">{stats?.today?.responsesSent || 0}</div>
+            <div className="stat-label">Today's Responses</div>
           </div>
-        )}
+        </div>
+      </div>
 
-        <div className="security-note">
-          <p>🔒 Your credentials are sent directly to Facebook.</p>
-          <p>We use an embedded browser for secure authentication.</p>
+      <div className="status-panel">
+        <h3>System Status</h3>
+        <div className="status-items">
+          <div className="status-item">
+            <span className={`status-dot ${status === 'connected' ? 'green' : 'red'}`}></span>
+            <span>Worker: {status === 'connected' ? 'Online' : 'Offline'}</span>
+          </div>
+          <div className="status-item">
+            <span className={`status-dot ${config?.enabled ? 'green' : 'yellow'}`}></span>
+            <span>Auto-Reply: {config?.enabled ? 'Enabled' : 'Disabled'}</span>
+          </div>
+          <div className="status-item">
+            <span className="status-dot blue"></span>
+            <span>Trigger: "{config?.triggerWord || 'fred'}"</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="recent-activity">
+        <h3>Recent Activity</h3>
+        <div className="activity-list">
+          {messages.slice(0, 5).map((msg, i) => (
+            <div key={msg.id || i} className={`activity-item ${msg.isFromFred ? 'from-fred' : ''}`}>
+              <div className="activity-icon">
+                {msg.isFromFred ? '🤖' : msg.triggeredFred ? '📣' : '💬'}
+              </div>
+              <div className="activity-content">
+                <div className="activity-text">{msg.text.substring(0, 100)}...</div>
+                <div className="activity-time">{formatTime(msg.timestamp)}</div>
+              </div>
+            </div>
+          ))}
+          {messages.length === 0 && (
+            <div className="empty-state">No messages yet</div>
+          )}
         </div>
       </div>
     </div>
   );
 
-  // Render main chat interface
-  const renderChat = () => (
-    <div className="chat-container">
-      {/* Sidebar */}
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <h2>💬 Chats</h2>
-          <div className="user-info">
-            <span className="user-name">{status.userName || 'User'}</span>
-            <button onClick={logout} className="logout-btn" title="Logout">
-              🚪
-            </button>
+  // Render messages tab
+  const renderMessages = () => (
+    <div className="messages-panel">
+      <h3>Message History</h3>
+      <div className="message-list">
+        {messages.map((msg, i) => (
+          <div 
+            key={msg.id || i} 
+            className={`message-item ${msg.isFromFred ? 'from-fred' : 'from-user'}`}
+          >
+            <div className="message-header">
+              <span className="message-sender">
+                {msg.isFromFred ? '🤖 Fred' : `👤 ${msg.senderId.substring(0, 8)}...`}
+              </span>
+              <span className="message-time">{formatTime(msg.timestamp)}</span>
+            </div>
+            <div className="message-text">{msg.text}</div>
+            {msg.triggeredFred && !msg.isFromFred && (
+              <div className="message-badge">Triggered Fred</div>
+            )}
           </div>
-        </div>
-        
-        <div className="auto-reply-toggle">
-          <label className="toggle-label">
-            <input
-              type="checkbox"
-              checked={autoReply}
-              onChange={toggleAutoReply}
-            />
-            <span className="toggle-slider"></span>
-            <span className="toggle-text">🤖 Fred Auto-Reply</span>
-          </label>
-        </div>
-
-        <div className="conversation-list">
-          {conversations.length === 0 ? (
-            <div className="empty-conversations">
-              <p>Loading conversations...</p>
-            </div>
-          ) : (
-            conversations.map((conv) => (
-              <div
-                key={conv.id}
-                className={`conversation-item ${selectedThread === conv.id ? 'selected' : ''} ${conv.unread ? 'unread' : ''}`}
-                onClick={() => selectConversation(conv.id)}
-              >
-                <div className="conv-avatar">
-                  {conv.avatar ? (
-                    <img src={conv.avatar} alt={conv.name} />
-                  ) : (
-                    <div className="avatar-placeholder">{conv.name[0]}</div>
-                  )}
-                </div>
-                <div className="conv-info">
-                  <span className="conv-name">{conv.name}</span>
-                  <span className="conv-preview">{conv.preview}</span>
-                </div>
-                <span className="conv-time">{conv.time}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Chat area */}
-      <div className="chat-area">
-        {selectedThread ? (
-          <>
-            <div className="chat-header">
-              <h3>{conversations.find(c => c.id === selectedThread)?.name || 'Chat'}</h3>
-              <button onClick={refreshScreenshot} className="view-btn" title="View browser">
-                👁️
-              </button>
-            </div>
-
-            <div className="messages-container">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`message ${msg.sent ? 'sent' : 'received'}`}
-                >
-                  <div className="message-content">
-                    <p>{msg.text}</p>
-                    {msg.time && <span className="message-time">{msg.time}</span>}
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-
-            <div className="message-input-container">
-              <input
-                type="text"
-                placeholder="Type a message..."
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                className="message-input"
-              />
-              <button onClick={sendMessage} className="send-btn" disabled={!messageInput.trim()}>
-                📤
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="no-chat-selected">
-            <div className="placeholder-content">
-              <span className="placeholder-icon">💬</span>
-              <h3>Select a conversation</h3>
-              <p>Choose a chat from the sidebar to start messaging</p>
-            </div>
+        ))}
+        {messages.length === 0 && (
+          <div className="empty-state">
+            <p>No messages yet.</p>
+            <p>Messages will appear here when users interact with your Facebook Page.</p>
           </div>
         )}
       </div>
+    </div>
+  );
 
-      {/* Screenshot modal */}
-      {screenshot && (
-        <div className="screenshot-modal" onClick={() => setScreenshot(null)}>
-          <div className="screenshot-content" onClick={(e) => e.stopPropagation()}>
-            <button className="close-btn" onClick={() => setScreenshot(null)}>✕</button>
-            <h3>Browser View</h3>
-            <img src={screenshot} alt="Browser view" />
-            <button onClick={refreshScreenshot} className="refresh-btn">🔄 Refresh</button>
+  // Render config tab
+  const renderConfig = () => (
+    <div className="config-panel">
+      <h3>Configuration</h3>
+      
+      {config ? (
+        <div className="config-form">
+          <div className="config-group">
+            <label>Auto-Reply Enabled</label>
+            <div className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={config.enabled}
+                onChange={(e) => updateConfig({ enabled: e.target.checked })}
+              />
+              <span className="toggle-slider"></span>
+            </div>
+          </div>
+
+          <div className="config-group">
+            <label>Trigger Word</label>
+            <input
+              type="text"
+              value={config.triggerWord}
+              onChange={(e) => updateConfig({ triggerWord: e.target.value })}
+              placeholder="fred"
+            />
+            <small>Fred will respond when this word is mentioned</small>
+          </div>
+
+          <div className="config-group">
+            <label>Case Sensitive</label>
+            <div className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={config.caseSensitive}
+                onChange={(e) => updateConfig({ caseSensitive: e.target.checked })}
+              />
+              <span className="toggle-slider"></span>
+            </div>
+          </div>
+
+          <div className="config-group">
+            <label>Response Prefix</label>
+            <input
+              type="text"
+              value={config.responsePrefix}
+              onChange={(e) => updateConfig({ responsePrefix: e.target.value })}
+              placeholder="🤖 Fred: "
+            />
+          </div>
+
+          <div className="config-group">
+            <label>AI Model</label>
+            <select
+              value={config.aiModel}
+              onChange={(e) => updateConfig({ aiModel: e.target.value })}
+            >
+              <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
+              <option value="gpt-4o">GPT-4o (Best Quality)</option>
+              <option value="gpt-4-turbo">GPT-4 Turbo</option>
+              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            </select>
+          </div>
+
+          <div className="config-group">
+            <label>System Prompt</label>
+            <textarea
+              value={config.systemPrompt}
+              onChange={(e) => updateConfig({ systemPrompt: e.target.value })}
+              rows={5}
+              placeholder="You are Fred, a helpful AI assistant..."
+            />
+            <small>Instructions for how Fred should respond</small>
+          </div>
+
+          <div className="config-group">
+            <label>Max Response Length</label>
+            <input
+              type="number"
+              value={config.maxResponseLength}
+              onChange={(e) => updateConfig({ maxResponseLength: parseInt(e.target.value) })}
+              min={100}
+              max={2000}
+            />
           </div>
         </div>
+      ) : (
+        <div className="loading">Loading configuration...</div>
       )}
+    </div>
+  );
+
+  // Render setup tab
+  const renderSetup = () => (
+    <div className="setup-panel">
+      <h3>Setup Guide</h3>
+      
+      <div className="setup-section">
+        <h4>1. Facebook App Setup</h4>
+        <ol>
+          <li>Go to <a href="https://developers.facebook.com/" target="_blank" rel="noopener noreferrer">Facebook Developers</a></li>
+          <li>Create a new app (Business type)</li>
+          <li>Add the "Messenger" product</li>
+          <li>Generate a Page Access Token</li>
+          <li>Configure the webhook:
+            <ul>
+              <li><strong>Callback URL:</strong> <code>{API_URL}/webhook</code></li>
+              <li><strong>Verify Token:</strong> <code>FRED_VERIFY_TOKEN_12345</code></li>
+              <li><strong>Subscriptions:</strong> messages, messaging_postbacks</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <div className="setup-section">
+        <h4>2. Worker Secrets</h4>
+        <p>Set these secrets using Wrangler CLI:</p>
+        <pre>{`wrangler secret put FB_PAGE_ACCESS_TOKEN
+wrangler secret put FB_APP_SECRET  
+wrangler secret put OPENAI_API_KEY`}</pre>
+      </div>
+
+      <div className="setup-section">
+        <h4>3. Dashboard API Key</h4>
+        <p>Set an API key to secure this dashboard:</p>
+        <div className="api-key-form">
+          <input
+            type="text"
+            value={newApiKey}
+            onChange={(e) => setNewApiKey(e.target.value)}
+            placeholder="Enter new API key"
+          />
+          <button onClick={setupApiKey}>Set API Key</button>
+        </div>
+      </div>
+
+      <div className="setup-section">
+        <h4>4. Enter Your API Key</h4>
+        <div className="api-key-form">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Enter your API key"
+          />
+          <button onClick={saveApiKey}>Save</button>
+        </div>
+      </div>
+
+      <div className="setup-section">
+        <h4>Test Connection</h4>
+        <button 
+          onClick={async () => {
+            const result = await apiCall('test');
+            if (result) {
+              alert('Connection successful!\n\n' + JSON.stringify(result, null, 2));
+            }
+          }}
+          className="test-btn"
+        >
+          Test Worker Connection
+        </button>
+      </div>
     </div>
   );
 
@@ -407,16 +429,62 @@ function App() {
     <div className="App">
       <header className="App-header">
         <div className="header-content">
-          <h1>🤖 Fred Messenger</h1>
-          <span className={`connection-status ${wsConnected ? 'connected' : 'disconnected'}`}>
-            {wsConnected ? '● Connected' : '○ Disconnected'}
-          </span>
+          <div className="logo">
+            <span className="logo-icon">🤖</span>
+            <h1>Fred Messenger</h1>
+          </div>
+          <div className="header-status">
+            <span className={`connection-badge ${status}`}>
+              {status === 'connected' ? '● Connected' : status === 'loading' ? '○ Loading...' : '● Offline'}
+            </span>
+          </div>
         </div>
       </header>
-      
+
+      <nav className="tab-nav">
+        <button 
+          className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          📊 Dashboard
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'messages' ? 'active' : ''}`}
+          onClick={() => setActiveTab('messages')}
+        >
+          💬 Messages
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
+          onClick={() => setActiveTab('config')}
+        >
+          ⚙️ Config
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'setup' ? 'active' : ''}`}
+          onClick={() => setActiveTab('setup')}
+        >
+          🔧 Setup
+        </button>
+      </nav>
+
+      {error && (
+        <div className="error-banner">
+          ⚠️ {error}
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+
       <main className="main-content">
-        {status.loggedIn ? renderChat() : renderLogin()}
+        {activeTab === 'dashboard' && renderDashboard()}
+        {activeTab === 'messages' && renderMessages()}
+        {activeTab === 'config' && renderConfig()}
+        {activeTab === 'setup' && renderSetup()}
       </main>
+
+      <footer className="App-footer">
+        <p>Fred Messenger v2.0 | Worker: {API_URL}</p>
+      </footer>
     </div>
   );
 }

@@ -1,0 +1,6 @@
+# Worker development secrets
+# Copy this to .dev.vars and fill in real values
+
+FB_PAGE_ACCESS_TOKEN=your_facebook_page_access_token
+FB_APP_SECRET=your_facebook_app_secret
+OPENAI_API_KEY=your_openai_api_key
