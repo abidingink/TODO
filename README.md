@@ -1,29 +1,73 @@
-# 🤖 Fred Messenger - Facebook Messenger AI Assistant
+# 🤖 AI Agent Dashboard
 
-A complete Facebook Messenger integration system that monitors chats for mentions of "Fred" and automatically responds as an AI assistant.
+A comprehensive dashboard for managing multiple AI agents, channels, skills, and external accounts. Built on Moltbot Gateway with real-time monitoring and control.
+
+## Features
+
+### 🧠 Agent Management
+- View and manage multiple AI agents
+- Configure agent settings and capabilities
+- Monitor agent performance and activity
+- Switch between different agents seamlessly
+
+### 📱 Channel Management  
+- Connect/disconnect messaging platforms (WhatsApp, Telegram, Discord, iMessage, etc.)
+- Configure channel-specific settings and permissions
+- View channel status and connection health
+- Manage group chat settings and mention rules
+
+### 🔧 Skills & Jobs Management
+- Install, update, and remove agent skills
+- Manage cron jobs and scheduled tasks
+- View job history and execution logs
+- Create new automation workflows
+
+### 🔐 Account Integration
+- Securely store external account credentials (email, social media, APIs)
+- Manage which agents have access to which accounts
+- View account connection status and permissions
+- Audit trail of account usage
+
+### 💬 Chat Interface
+- Direct real-time chat with your primary AI agent
+- View conversation history and context
+- Send commands and receive responses instantly
+- Multi-agent chat switching
+
+### 📊 System Monitoring
+- Real-time system status and health metrics
+- Resource usage monitoring (CPU, memory, network)
+- Log viewing and filtering
+- Performance analytics and insights
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Facebook Platform                           │
-│  ┌──────────┐    Webhook Events    ┌──────────────────────┐    │
-│  │ Messenger│─────────────────────▶│  Cloudflare Worker   │    │
-│  │  Users   │◀─────────────────────│  (fred-messenger-api)│    │
-│  └──────────┘    Graph API Reply   └──────────────────────┘    │
+│                    AI Agent Dashboard                           │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              React Frontend                             │   │
+│  │  • Agent Management                                     │   │
+│  │  • Channel Configuration                                │   │
+│  │  • Skills & Jobs                                        │   │
+│  │  │  • Account Integration                               │   │
+│  │  • Real-time Chat                                       │   │
+│  │  • System Monitoring                                    │   │
+│  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                                               │
-                                              │ KV Storage
+                                              │ WebSocket/API
                                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Cloudflare Pages                              │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │              React Dashboard                              │   │
-│  │  • Monitor messages                                       │   │
-│  │  • Configure auto-reply                                   │   │
-│  │  • View conversation history                              │   │
-│  │  • Manage AI settings                                     │   │
-│  └─────────────────────────────────────────────────────────┘   │
+│                    Moltbot Gateway                              │
+│  ┌──────────┐    Session Management    ┌──────────────────────┐ │
+│  │ Channels │◄────────────────────────►│      Agents          │ │
+│  └──────────┘    Message Routing       └──────────────────────┘ │
+│        ▲                                   ▲                   │
+│        │                                   │                   │
+│  ┌──────────┐    External Services    ┌──────────────────────┐ │
+│  │ Accounts │◄────────────────────────►│      Skills          │ │
+│  └──────────┘    Job Scheduling       └──────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -35,15 +79,12 @@ A complete Facebook Messenger integration system that monitors chats for mention
 # Install dependencies
 npm install
 
-# Start both API server and React dashboard
+# Start development server
 npm run dev
 
 # Or run separately:
-npm run dev:api      # Local API server (port 8787)
+npm run dev:api      # Local API proxy (port 8787)
 npm run dev:client   # React dashboard (port 5173)
-
-# Test webhook functionality
-npm run test:webhook
 ```
 
 ### Build for Production
@@ -54,27 +95,8 @@ npm run build
 
 ## Deployment
 
-### 1. Deploy Cloudflare Worker (Backend)
+### Cloudflare Pages (Recommended)
 
-```bash
-cd worker
-
-# Create KV namespace
-wrangler kv:namespace create FRED_KV
-# Note the ID and update wrangler.toml
-
-# Set secrets
-wrangler secret put FB_PAGE_ACCESS_TOKEN
-wrangler secret put FB_APP_SECRET
-wrangler secret put OPENAI_API_KEY
-
-# Deploy
-wrangler deploy
-```
-
-### 2. Deploy Cloudflare Pages (Frontend)
-
-**Option A: Via Cloudflare Dashboard**
 1. Go to Cloudflare Dashboard → Pages
 2. Create a new project
 3. Connect your Git repository
@@ -83,125 +105,73 @@ wrangler deploy
    - Build output directory: `dist`
    - Root directory: `/` (or `/fb-messenger-project` if in monorepo)
 
-**Option B: Via Wrangler CLI**
-```bash
-# Build the project
-npm run build
+### Direct Integration with Moltbot
 
-# Deploy to Pages
-wrangler pages deploy dist --project-name=fred-messenger
-```
+The dashboard automatically connects to your local Moltbot Gateway at:
+- **Default**: `http://localhost:18789`
+- **Custom**: Set `VITE_MOLTBOT_URL` environment variable
 
-### 3. Configure Facebook App
+## Configuration
 
-1. Go to [Facebook Developers](https://developers.facebook.com/)
-2. Create/open your app
-3. Add "Messenger" product
-4. Configure Webhook:
-   - **Callback URL**: `https://fred-messenger-api.<your-subdomain>.workers.dev/webhook`
-   - **Verify Token**: `FRED_VERIFY_TOKEN_12345` (or your custom token)
-   - **Subscriptions**: `messages`, `messaging_postbacks`
-5. Generate Page Access Token
-6. Subscribe your webhook to your Page
+### Environment Variables
 
-### 4. Update Dashboard Configuration
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_MOLTBOT_URL` | `http://localhost:18789` | Moltbot Gateway URL |
+| `VITE_API_KEY` | (auto-generated) | Dashboard API key for security |
 
-In `src/main.jsx` or via environment variable:
-```javascript
-window.FRED_API_URL = 'https://fred-messenger-api.<your-subdomain>.workers.dev';
-```
+### Security
 
-Or set `VITE_WORKER_URL` during build.
-
-## Configuration Options
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `triggerWord` | "fred" | Word that triggers AI response |
-| `caseSensitive` | false | Case-sensitive trigger matching |
-| `enabled` | true | Enable/disable auto-reply |
-| `responsePrefix` | "🤖 Fred: " | Prefix for AI responses |
-| `aiModel` | "gpt-4o-mini" | OpenAI model for responses |
-| `maxResponseLength` | 2000 | Max response characters |
-
-## API Endpoints
-
-### Worker API
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/webhook` | GET | Facebook verification |
-| `/webhook` | POST | Receive Facebook events |
-| `/api/messages` | GET | Get message history |
-| `/api/config` | GET/POST | Get/update configuration |
-| `/api/stats` | GET | Get statistics |
-| `/api/conversations` | GET | Get conversation list |
-| `/api/test` | GET | Test endpoint |
-
-## Troubleshooting
-
-### Blank Screen on Cloudflare Pages
-- Ensure `index.html` exists in the `dist` folder
-- Check that `_redirects` file contains: `/*    /index.html   200`
-- Verify build command and output directory in Pages settings
-
-### Webhook Not Receiving Events
-- Verify webhook URL is publicly accessible
-- Check verify token matches in Facebook App and Worker
-- Ensure Page is subscribed to webhook events
-- Check Worker logs for errors
-
-### AI Not Responding
-- Verify `OPENAI_API_KEY` secret is set
-- Check trigger word detection (case sensitivity)
-- Ensure `enabled` is true in config
-- Review Worker logs for API errors
-
-### CORS Errors
-- Worker includes CORS headers for all origins
-- For production, consider restricting to your Pages domain
+- The dashboard uses Moltbot's built-in authentication
+- All credential storage is encrypted and secure
+- API keys are required for dashboard access
+- HTTPS is enforced in production
 
 ## Project Structure
 
 ```
-fb-messenger-project/
+ai-agent-dashboard/
 ├── dist/                    # Production build output
 ├── public/                  # Static assets
 ├── scripts/
-│   ├── local-api-server.js  # Local development API
-│   └── test-webhook.js      # Webhook test script
+│   ├── local-api-proxy.js   # Local development API proxy
+│   └── setup.js            # Initial setup script
 ├── src/
-│   ├── App.jsx              # React dashboard
-│   ├── App.css              # Dashboard styles
-│   ├── main.jsx             # Entry point
-│   └── index.css            # Global styles
-├── worker/
-│   ├── src/
-│   │   └── index.ts         # Cloudflare Worker
-│   ├── wrangler.toml        # Worker configuration
-│   └── .dev.vars            # Local secrets (not committed)
-├── _headers                 # Cloudflare Pages headers
-├── _redirects               # SPA routing for Pages
-├── index.html               # HTML template
+│   ├── components/         # React components
+│   │   ├── agents/         # Agent management components
+│   │   ├── channels/       # Channel management components  
+│   │   ├── skills/         # Skills and jobs components
+│   │   ├── accounts/       # Account integration components
+│   │   ├── chat/           # Chat interface components
+│   │   └── monitoring/     # System monitoring components
+│   ├── App.jsx             # Main application component
+│   ├── App.css             # Application styles
+│   ├── main.jsx            # Entry point
+│   └── index.css           # Global styles
+├── _headers                # Cloudflare Pages headers
+├── _redirects              # SPA routing for Pages
+├── index.html              # HTML template
 ├── package.json
 ├── vite.config.js
 └── README.md
 ```
 
+## API Integration
+
+The dashboard communicates with Moltbot Gateway using:
+
+- **WebSocket**: Real-time communication and chat
+- **REST API**: Configuration and management operations
+- **Event Stream**: Real-time updates and notifications
+
+All API endpoints are documented in the [Moltbot API documentation](https://docs.molt.bot).
+
 ## Development Notes
 
-- The local API server (`scripts/local-api-server.js`) emulates the Worker for testing
-- Use `npm run test:webhook` to simulate Facebook webhook events
-- Messages are stored in-memory locally; in production, they persist in KV
-- The Worker requires Node.js compatible runtime (Cloudflare Workers)
-
-## Security Considerations
-
-1. **Never commit secrets** - Use `.dev.vars` locally, Wrangler secrets in production
-2. **API Key for Dashboard** - Set via `/api/setup-key` endpoint
-3. **Facebook App Secret** - Used for validating webhook signatures (implement in production)
-4. **Rate Limiting** - Consider implementing for production use
+- The local API proxy (`scripts/local-api-proxy.js`) forwards requests to Moltbot Gateway
+- Use browser developer tools to debug WebSocket connections
+- The dashboard automatically detects Moltbot Gateway status
+- All sensitive operations require authentication
 
 ## License
 

@@ -1,29 +1,23 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
+// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8787',
-        changeOrigin: true
-      }
-    }
-  },
   build: {
     outDir: 'dist',
-    sourcemap: false,
-    // Ensure proper asset handling for Cloudflare Pages
-    assetsDir: 'assets',
-    rollupOptions: {
-      output: {
-        manualChunks: undefined
-      }
-    }
+    sourcemap: true,
   },
-  // Base path for assets
-  base: '/'
+  server: {
+    port: 5173,
+    open: false,
+    // For production deployment with Cloudflare Pages
+    // This ensures SPA routing works correctly
+    middlewareMode: false,
+  },
+  // Environment variables
+  define: {
+    'process.env.VITE_WORKER_URL': JSON.stringify(process.env.VITE_WORKER_URL || ''),
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+  },
 })

@@ -1,45 +1,45 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 
-// Configuration - Update this for production
+// Configuration - Point to Moltbot Gateway
 const getApiUrl = () => {
-  // In development, use local worker
+  // In development, use local gateway
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:8787';
+    return 'http://localhost:18789';
   }
-  // In production, use the worker URL (set via environment or config)
-  return window.FRED_API_URL || 'https://fred-messenger-api.workers.dev';
+  // In production, use the configured gateway URL
+  return window.MOLTBOT_GATEWAY_URL || 'http://localhost:18789';
 };
 
 const API_URL = getApiUrl();
 
 function App() {
   const [status, setStatus] = useState('loading');
-  const [config, setConfig] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [conversations, setConversations] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [apiKey, setApiKey] = useState(localStorage.getItem('fred_api_key') || '');
   const [error, setError] = useState(null);
-  const [setupMode, setSetupMode] = useState(false);
-  const [newApiKey, setNewApiKey] = useState('');
+  const [authToken, setAuthToken] = useState(localStorage.getItem('moltbot_auth_token') || '');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
 
-  // API call helper
+  // API call helper for Moltbot Gateway
   const apiCall = useCallback(async (endpoint, options = {}) => {
     try {
-      const response = await fetch(`${API_URL}/api/${endpoint}`, {
+      const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
+          'Authorization': `Bearer ${authToken}`,
           ...options.headers,
         },
       });
       
       if (!response.ok) {
         if (response.status === 401) {
-          setError('Invalid API key');
+          setError('Invalid authentication token');
           return null;
         }
         throw new Error(`API error: ${response.status}`);
@@ -51,49 +51,49 @@ function App() {
       setError(err.message);
       return null;
     }
-  }, [apiKey]);
+  }, [authToken]);
 
-  // Load initial data
+  // Load initial data from Moltbot Gateway
   useEffect(() => {
     const loadData = async () => {
       setError(null);
       
-      // Check worker health
+      // Check gateway health
       try {
         const health = await fetch(`${API_URL}/health`);
         if (!health.ok) {
           setStatus('offline');
-          setError('Worker is offline');
+          setError('Gateway is offline');
           return;
         }
       } catch (err) {
         setStatus('offline');
-        setError('Cannot connect to worker');
+        setError('Cannot connect to gateway');
         return;
       }
 
-      // Load config
-      const configData = await apiCall('config');
-      if (configData) {
-        setConfig(configData.config);
+      // Load agents
+      const agentsData = await apiCall('/api/agents');
+      if (agentsData) {
+        setAgents(agentsData.agents);
       }
 
-      // Load stats
-      const statsData = await apiCall('stats');
-      if (statsData) {
-        setStats(statsData.stats);
+      // Load channels
+      const channelsData = await apiCall('/api/channels');
+      if (channelsData) {
+        setChannels(channelsData.channels);
       }
 
-      // Load messages
-      const messagesData = await apiCall('messages?limit=50');
-      if (messagesData) {
-        setMessages(messagesData.messages);
+      // Load jobs
+      const jobsData = await apiCall('/api/jobs');
+      if (jobsData) {
+        setJobs(jobsData.jobs);
       }
 
-      // Load conversations
-      const convData = await apiCall('conversations');
-      if (convData) {
-        setConversations(convData.conversations);
+      // Load accounts
+      const accountsData = await apiCall('/api/accounts');
+      if (accountsData) {
+        setAccounts(accountsData.accounts);
       }
 
       setStatus('connected');
@@ -106,39 +106,53 @@ function App() {
     return () => clearInterval(interval);
   }, [apiCall]);
 
-  // Update config
-  const updateConfig = async (updates) => {
-    const result = await apiCall('config', {
-      method: 'POST',
-      body: JSON.stringify(updates),
-    });
+  // Send chat message
+  const sendChatMessage = async () => {
+    if (!newMessage.trim()) return;
     
-    if (result) {
-      setConfig(result.config);
+    const message = newMessage.trim();
+    setNewMessage('');
+    
+    // Add to local chat
+    const userMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: message,
+      timestamp: Date.now()
+    };
+    setChatMessages(prev => [...prev, userMessage]);
+    
+    // Send to agent
+    try {
+      const response = await apiCall('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message })
+      });
+      
+      if (response) {
+        const agentMessage = {
+          id: Date.now().toString() + '-agent',
+          role: 'assistant',
+          content: response.message,
+          timestamp: Date.now()
+        };
+        setChatMessages(prev => [...prev, agentMessage]);
+      }
+    } catch (err) {
+      console.error('Chat message failed:', err);
+      const errorMessage = {
+        id: Date.now().toString() + '-error',
+        role: 'system',
+        content: 'Failed to send message. Please try again.',
+        timestamp: Date.now()
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
     }
   };
 
-  // Setup API key
-  const setupApiKey = async () => {
-    if (!newApiKey) return;
-    
-    const response = await fetch(`${API_URL}/api/setup-key`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: newApiKey }),
-    });
-    
-    if (response.ok) {
-      setApiKey(newApiKey);
-      localStorage.setItem('fred_api_key', newApiKey);
-      setSetupMode(false);
-      setNewApiKey('');
-    }
-  };
-
-  // Save API key to localStorage
-  const saveApiKey = () => {
-    localStorage.setItem('fred_api_key', apiKey);
+  // Save auth token
+  const saveAuthToken = () => {
+    localStorage.setItem('moltbot_auth_token', authToken);
     window.location.reload();
   };
 
@@ -154,34 +168,34 @@ function App() {
     <div className="dashboard">
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon">📨</div>
-          <div className="stat-info">
-            <div className="stat-value">{stats?.total?.messagesReceived || 0}</div>
-            <div className="stat-label">Total Messages</div>
-          </div>
-        </div>
-        
-        <div className="stat-card">
           <div className="stat-icon">🤖</div>
           <div className="stat-info">
-            <div className="stat-value">{stats?.total?.responsesSent || 0}</div>
-            <div className="stat-label">Fred Responses</div>
+            <div className="stat-value">{agents.length}</div>
+            <div className="stat-label">Active Agents</div>
           </div>
         </div>
         
         <div className="stat-card">
-          <div className="stat-icon">📅</div>
+          <div className="stat-icon">💬</div>
           <div className="stat-info">
-            <div className="stat-value">{stats?.today?.messagesReceived || 0}</div>
-            <div className="stat-label">Today's Messages</div>
+            <div className="stat-value">{channels.length}</div>
+            <div className="stat-label">Connected Channels</div>
           </div>
         </div>
         
         <div className="stat-card">
-          <div className="stat-icon">✨</div>
+          <div className="stat-icon">⏰</div>
           <div className="stat-info">
-            <div className="stat-value">{stats?.today?.responsesSent || 0}</div>
-            <div className="stat-label">Today's Responses</div>
+            <div className="stat-value">{jobs.filter(j => j.enabled).length}</div>
+            <div className="stat-label">Active Jobs</div>
+          </div>
+        </div>
+        
+        <div className="stat-card">
+          <div className="stat-icon">🔑</div>
+          <div className="stat-info">
+            <div className="stat-value">{accounts.length}</div>
+            <div className="stat-label">Linked Accounts</div>
           </div>
         </div>
       </div>
@@ -191,15 +205,11 @@ function App() {
         <div className="status-items">
           <div className="status-item">
             <span className={`status-dot ${status === 'connected' ? 'green' : 'red'}`}></span>
-            <span>Worker: {status === 'connected' ? 'Online' : 'Offline'}</span>
-          </div>
-          <div className="status-item">
-            <span className={`status-dot ${config?.enabled ? 'green' : 'yellow'}`}></span>
-            <span>Auto-Reply: {config?.enabled ? 'Enabled' : 'Disabled'}</span>
+            <span>Gateway: {status === 'connected' ? 'Online' : 'Offline'}</span>
           </div>
           <div className="status-item">
             <span className="status-dot blue"></span>
-            <span>Trigger: "{config?.triggerWord || 'fred'}"</span>
+            <span>Main Agent: {agents.find(a => a.id === 'main')?.status || 'Unknown'}</span>
           </div>
         </div>
       </div>
@@ -207,219 +217,303 @@ function App() {
       <div className="recent-activity">
         <h3>Recent Activity</h3>
         <div className="activity-list">
-          {messages.slice(0, 5).map((msg, i) => (
-            <div key={msg.id || i} className={`activity-item ${msg.isFromFred ? 'from-fred' : ''}`}>
+          {chatMessages.slice(-5).map((msg, i) => (
+            <div key={msg.id} className={`activity-item ${msg.role === 'assistant' ? 'from-agent' : msg.role === 'user' ? 'from-user' : 'system'}`}>
               <div className="activity-icon">
-                {msg.isFromFred ? '🤖' : msg.triggeredFred ? '📣' : '💬'}
+                {msg.role === 'assistant' ? '🤖' : msg.role === 'user' ? '👤' : '⚙️'}
               </div>
               <div className="activity-content">
-                <div className="activity-text">{msg.text.substring(0, 100)}...</div>
+                <div className="activity-text">{msg.content.substring(0, 100)}...</div>
                 <div className="activity-time">{formatTime(msg.timestamp)}</div>
               </div>
             </div>
           ))}
-          {messages.length === 0 && (
-            <div className="empty-state">No messages yet</div>
+          {chatMessages.length === 0 && (
+            <div className="empty-state">No recent activity</div>
           )}
         </div>
       </div>
     </div>
   );
 
-  // Render messages tab
-  const renderMessages = () => (
-    <div className="messages-panel">
-      <h3>Message History</h3>
-      <div className="message-list">
-        {messages.map((msg, i) => (
-          <div 
-            key={msg.id || i} 
-            className={`message-item ${msg.isFromFred ? 'from-fred' : 'from-user'}`}
-          >
-            <div className="message-header">
-              <span className="message-sender">
-                {msg.isFromFred ? '🤖 Fred' : `👤 ${msg.senderId.substring(0, 8)}...`}
-              </span>
-              <span className="message-time">{formatTime(msg.timestamp)}</span>
+  // Render agents tab
+  const renderAgents = () => (
+    <div className="agents-panel">
+      <h3>AI Agents</h3>
+      <div className="agents-list">
+        {agents.map((agent) => (
+          <div key={agent.id} className="agent-card">
+            <div className="agent-header">
+              <div className="agent-name">
+                <span className="agent-icon">🤖</span>
+                <span>{agent.name || agent.id}</span>
+              </div>
+              <div className={`agent-status ${agent.status?.toLowerCase() || 'unknown'}`}>
+                {agent.status || 'Unknown'}
+              </div>
             </div>
-            <div className="message-text">{msg.text}</div>
-            {msg.triggeredFred && !msg.isFromFred && (
-              <div className="message-badge">Triggered Fred</div>
-            )}
+            <div className="agent-details">
+              <div className="agent-info">
+                <strong>Model:</strong> {agent.model || 'Default'}
+              </div>
+              <div className="agent-info">
+                <strong>Skills:</strong> {agent.skills?.length || 0}
+              </div>
+              <div className="agent-info">
+                <strong>Created:</strong> {formatTime(agent.createdAt)}
+              </div>
+            </div>
+            <div className="agent-actions">
+              <button onClick={() => {/* Implement agent config */}}>Configure</button>
+              <button onClick={() => {/* Implement restart */}}>Restart</button>
+            </div>
           </div>
         ))}
-        {messages.length === 0 && (
+        {agents.length === 0 && (
           <div className="empty-state">
-            <p>No messages yet.</p>
-            <p>Messages will appear here when users interact with your Facebook Page.</p>
+            <p>No agents found.</p>
+            <p>Your main agent should appear here once connected.</p>
           </div>
         )}
       </div>
     </div>
   );
 
-  // Render config tab
-  const renderConfig = () => (
-    <div className="config-panel">
-      <h3>Configuration</h3>
-      
-      {config ? (
-        <div className="config-form">
-          <div className="config-group">
-            <label>Auto-Reply Enabled</label>
-            <div className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={config.enabled}
-                onChange={(e) => updateConfig({ enabled: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
+  // Render channels tab
+  const renderChannels = () => (
+    <div className="channels-panel">
+      <h3>Messaging Channels</h3>
+      <div className="channels-list">
+        {channels.map((channel) => (
+          <div key={channel.id} className="channel-card">
+            <div className="channel-header">
+              <div className="channel-name">
+                <span className="channel-icon">
+                  {channel.type === 'whatsapp' ? '📱' : 
+                   channel.type === 'telegram' ? '✈️' : 
+                   channel.type === 'discord' ? '🎮' : 
+                   channel.type === 'imessage' ? '💬' : '❓'}
+                </span>
+                <span>{channel.name || channel.type}</span>
+              </div>
+              <div className={`channel-status ${channel.connected ? 'connected' : 'disconnected'}`}>
+                {channel.connected ? 'Connected' : 'Disconnected'}
+              </div>
+            </div>
+            <div className="channel-details">
+              <div className="channel-info">
+                <strong>Type:</strong> {channel.type}
+              </div>
+              <div className="channel-info">
+                <strong>Account:</strong> {channel.accountId || 'Not set'}
+              </div>
+              <div className="channel-info">
+                <strong>Last Active:</strong> {formatTime(channel.lastActive)}
+              </div>
+            </div>
+            <div className="channel-actions">
+              <button onClick={() => {/* Implement connect/disconnect */}}>
+                {channel.connected ? 'Disconnect' : 'Connect'}
+              </button>
+              <button onClick={() => {/* Implement configure */}}>Configure</button>
             </div>
           </div>
-
-          <div className="config-group">
-            <label>Trigger Word</label>
-            <input
-              type="text"
-              value={config.triggerWord}
-              onChange={(e) => updateConfig({ triggerWord: e.target.value })}
-              placeholder="fred"
-            />
-            <small>Fred will respond when this word is mentioned</small>
+        ))}
+        {channels.length === 0 && (
+          <div className="empty-state">
+            <p>No channels connected.</p>
+            <p>Connect WhatsApp, Telegram, Discord, or other messaging platforms.</p>
           </div>
+        )}
+      </div>
+    </div>
+  );
 
-          <div className="config-group">
-            <label>Case Sensitive</label>
-            <div className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={config.caseSensitive}
-                onChange={(e) => updateConfig({ caseSensitive: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
+  // Render jobs tab
+  const renderJobs = () => (
+    <div className="jobs-panel">
+      <h3>Automation Jobs</h3>
+      <div className="jobs-list">
+        {jobs.map((job) => (
+          <div key={job.id} className="job-card">
+            <div className="job-header">
+              <div className="job-name">
+                <span className="job-icon">⏰</span>
+                <span>{job.name || job.id}</span>
+              </div>
+              <div className={`job-status ${job.enabled ? 'enabled' : 'disabled'}`}>
+                {job.enabled ? 'Enabled' : 'Disabled'}
+              </div>
+            </div>
+            <div className="job-details">
+              <div className="job-info">
+                <strong>Schedule:</strong> {job.schedule?.expr || job.schedule?.everyMs || 'One-time'}
+              </div>
+              <div className="job-info">
+                <strong>Target:</strong> {job.sessionTarget}
+              </div>
+              <div className="job-info">
+                <strong>Created:</strong> {formatTime(job.createdAt)}
+              </div>
+              <div className="job-info">
+                <strong>Last Run:</strong> {job.lastRun ? formatTime(job.lastRun) : 'Never'}
+              </div>
+            </div>
+            <div className="job-actions">
+              <button onClick={() => {/* Implement toggle */}}>
+                {job.enabled ? 'Disable' : 'Enable'}
+              </button>
+              <button onClick={() => {/* Implement edit */}}>Edit</button>
+              <button onClick={() => {/* Implement delete */}} className="danger">Delete</button>
             </div>
           </div>
-
-          <div className="config-group">
-            <label>Response Prefix</label>
-            <input
-              type="text"
-              value={config.responsePrefix}
-              onChange={(e) => updateConfig({ responsePrefix: e.target.value })}
-              placeholder="🤖 Fred: "
-            />
+        ))}
+        {jobs.length === 0 && (
+          <div className="empty-state">
+            <p>No automation jobs configured.</p>
+            <p>Create scheduled tasks, reminders, or recurring actions.</p>
           </div>
+        )}
+      </div>
+    </div>
+  );
 
-          <div className="config-group">
-            <label>AI Model</label>
-            <select
-              value={config.aiModel}
-              onChange={(e) => updateConfig({ aiModel: e.target.value })}
-            >
-              <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
-              <option value="gpt-4o">GPT-4o (Best Quality)</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            </select>
+  // Render accounts tab
+  const renderAccounts = () => (
+    <div className="accounts-panel">
+      <h3>Linked Accounts</h3>
+      <div className="accounts-list">
+        {accounts.map((account) => (
+          <div key={account.id} className="account-card">
+            <div className="account-header">
+              <div className="account-name">
+                <span className="account-icon">
+                  {account.type === 'email' ? '📧' : 
+                   account.type === 'social' ? '🌐' : 
+                   account.type === 'storage' ? '💾' : '❓'}
+                </span>
+                <span>{account.name || account.username}</span>
+              </div>
+              <div className={`account-status ${account.verified ? 'verified' : 'unverified'}`}>
+                {account.verified ? 'Verified' : 'Unverified'}
+              </div>
+            </div>
+            <div className="account-details">
+              <div className="account-info">
+                <strong>Type:</strong> {account.type}
+              </div>
+              <div className="account-info">
+                <strong>Username:</strong> {account.username}
+              </div>
+              <div className="account-info">
+                <strong>Connected Apps:</strong> {account.connectedAgents?.join(', ') || 'None'}
+              </div>
+              <div className="account-info">
+                <strong>Added:</strong> {formatTime(account.createdAt)}
+              </div>
+            </div>
+            <div className="account-actions">
+              <button onClick={() => {/* Implement test connection */}}>Test</button>
+              <button onClick={() => {/* Implement edit */}}>Edit</button>
+              <button onClick={() => {/* Implement remove */}} className="danger">Remove</button>
+            </div>
           </div>
+        ))}
+        {accounts.length === 0 && (
+          <div className="empty-state">
+            <p>No accounts linked.</p>
+            <p>Link email accounts, social media, cloud storage, and other services.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-          <div className="config-group">
-            <label>System Prompt</label>
-            <textarea
-              value={config.systemPrompt}
-              onChange={(e) => updateConfig({ systemPrompt: e.target.value })}
-              rows={5}
-              placeholder="You are Fred, a helpful AI assistant..."
-            />
-            <small>Instructions for how Fred should respond</small>
-          </div>
-
-          <div className="config-group">
-            <label>Max Response Length</label>
-            <input
-              type="number"
-              value={config.maxResponseLength}
-              onChange={(e) => updateConfig({ maxResponseLength: parseInt(e.target.value) })}
-              min={100}
-              max={2000}
-            />
-          </div>
+  // Render chat tab
+  const renderChat = () => (
+    <div className="chat-panel">
+      <h3>Chat with Your Agent</h3>
+      <div className="chat-container">
+        <div className="chat-messages">
+          {chatMessages.map((msg) => (
+            <div key={msg.id} className={`chat-message ${msg.role}`}>
+              <div className="message-content">
+                <div className="message-text">{msg.content}</div>
+                <div className="message-time">{formatTime(msg.timestamp)}</div>
+              </div>
+            </div>
+          ))}
         </div>
-      ) : (
-        <div className="loading">Loading configuration...</div>
-      )}
+        <div className="chat-input">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+            placeholder="Type your message..."
+            disabled={!authToken}
+          />
+          <button onClick={sendChatMessage} disabled={!authToken || !newMessage.trim()}>
+            Send
+          </button>
+        </div>
+      </div>
     </div>
   );
 
   // Render setup tab
   const renderSetup = () => (
     <div className="setup-panel">
-      <h3>Setup Guide</h3>
+      <h3>Setup & Configuration</h3>
       
       <div className="setup-section">
-        <h4>1. Facebook App Setup</h4>
-        <ol>
-          <li>Go to <a href="https://developers.facebook.com/" target="_blank" rel="noopener noreferrer">Facebook Developers</a></li>
-          <li>Create a new app (Business type)</li>
-          <li>Add the "Messenger" product</li>
-          <li>Generate a Page Access Token</li>
-          <li>Configure the webhook:
-            <ul>
-              <li><strong>Callback URL:</strong> <code>{API_URL}/webhook</code></li>
-              <li><strong>Verify Token:</strong> <code>FRED_VERIFY_TOKEN_12345</code></li>
-              <li><strong>Subscriptions:</strong> messages, messaging_postbacks</li>
-            </ul>
-          </li>
-        </ol>
-      </div>
-
-      <div className="setup-section">
-        <h4>2. Worker Secrets</h4>
-        <p>Set these secrets using Wrangler CLI:</p>
-        <pre>{`wrangler secret put FB_PAGE_ACCESS_TOKEN
-wrangler secret put FB_APP_SECRET  
-wrangler secret put OPENAI_API_KEY`}</pre>
-      </div>
-
-      <div className="setup-section">
-        <h4>3. Dashboard API Key</h4>
-        <p>Set an API key to secure this dashboard:</p>
-        <div className="api-key-form">
+        <h4>1. Gateway Connection</h4>
+        <p>Connect to your Moltbot Gateway instance:</p>
+        <div className="gateway-form">
           <input
             type="text"
-            value={newApiKey}
-            onChange={(e) => setNewApiKey(e.target.value)}
-            placeholder="Enter new API key"
+            value={authToken}
+            onChange={(e) => setAuthToken(e.target.value)}
+            placeholder="Enter your gateway authentication token"
           />
-          <button onClick={setupApiKey}>Set API Key</button>
+          <button onClick={saveAuthToken}>Save Token</button>
+        </div>
+        <p>Find your token in your Moltbot configuration file or generate a new one.</p>
+      </div>
+
+      <div className="setup-section">
+        <h4>2. Connect Channels</h4>
+        <p>Link your messaging platforms:</p>
+        <div className="channel-setup">
+          <button onClick={() => {/* Implement WhatsApp setup */}}>📱 WhatsApp</button>
+          <button onClick={() => {/* Implement Telegram setup */}}>✈️ Telegram</button>
+          <button onClick={() => {/* Implement Discord setup */}}>🎮 Discord</button>
+          <button onClick={() => {/* Implement iMessage setup */}}>💬 iMessage</button>
         </div>
       </div>
 
       <div className="setup-section">
-        <h4>4. Enter Your API Key</h4>
-        <div className="api-key-form">
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter your API key"
-          />
-          <button onClick={saveApiKey}>Save</button>
+        <h4>3. Link Accounts</h4>
+        <p>Connect external services securely:</p>
+        <div className="account-setup">
+          <button onClick={() => {/* Implement email setup */}}>📧 Email</button>
+          <button onClick={() => {/* Implement social media setup */}}>🌐 Social Media</button>
+          <button onClick={() => {/* Implement cloud storage setup */}}>💾 Cloud Storage</button>
         </div>
       </div>
 
       <div className="setup-section">
-        <h4>Test Connection</h4>
+        <h4>4. Test Connection</h4>
         <button 
           onClick={async () => {
-            const result = await apiCall('test');
+            const result = await apiCall('/health');
             if (result) {
               alert('Connection successful!\n\n' + JSON.stringify(result, null, 2));
             }
           }}
           className="test-btn"
         >
-          Test Worker Connection
+          Test Gateway Connection
         </button>
       </div>
     </div>
@@ -430,8 +524,8 @@ wrangler secret put OPENAI_API_KEY`}</pre>
       <header className="App-header">
         <div className="header-content">
           <div className="logo">
-            <span className="logo-icon">🤖</span>
-            <h1>Fred Messenger</h1>
+            <span className="logo-icon">🧠</span>
+            <h1>AI Agent Dashboard</h1>
           </div>
           <div className="header-status">
             <span className={`connection-badge ${status}`}>
@@ -449,16 +543,34 @@ wrangler secret put OPENAI_API_KEY`}</pre>
           📊 Dashboard
         </button>
         <button 
-          className={`tab-btn ${activeTab === 'messages' ? 'active' : ''}`}
-          onClick={() => setActiveTab('messages')}
+          className={`tab-btn ${activeTab === 'agents' ? 'active' : ''}`}
+          onClick={() => setActiveTab('agents')}
         >
-          💬 Messages
+          🤖 Agents
         </button>
         <button 
-          className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
-          onClick={() => setActiveTab('config')}
+          className={`tab-btn ${activeTab === 'channels' ? 'active' : ''}`}
+          onClick={() => setActiveTab('channels')}
         >
-          ⚙️ Config
+          💬 Channels
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'jobs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('jobs')}
+        >
+          ⏰ Jobs
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'accounts' ? 'active' : ''}`}
+          onClick={() => setActiveTab('accounts')}
+        >
+          🔑 Accounts
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
+          onClick={() => setActiveTab('chat')}
+        >
+          💭 Chat
         </button>
         <button 
           className={`tab-btn ${activeTab === 'setup' ? 'active' : ''}`}
@@ -477,13 +589,16 @@ wrangler secret put OPENAI_API_KEY`}</pre>
 
       <main className="main-content">
         {activeTab === 'dashboard' && renderDashboard()}
-        {activeTab === 'messages' && renderMessages()}
-        {activeTab === 'config' && renderConfig()}
+        {activeTab === 'agents' && renderAgents()}
+        {activeTab === 'channels' && renderChannels()}
+        {activeTab === 'jobs' && renderJobs()}
+        {activeTab === 'accounts' && renderAccounts()}
+        {activeTab === 'chat' && renderChat()}
         {activeTab === 'setup' && renderSetup()}
       </main>
 
       <footer className="App-footer">
-        <p>Fred Messenger v2.0 | Worker: {API_URL}</p>
+        <p>AI Agent Dashboard v1.0 | Gateway: {API_URL}</p>
       </footer>
     </div>
   );
