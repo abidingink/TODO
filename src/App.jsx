@@ -13,10 +13,12 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
+  const [expandedTodos, setExpandedTodos] = useState(new Set());
 
   // Load todos from localStorage on initial render
   useEffect(() => {
     const savedTodos = localStorage.getItem('todos');
+    const savedExpanded = localStorage.getItem('expandedTodos');
     if (savedTodos) {
       try {
         setTodos(JSON.parse(savedTodos));
@@ -24,12 +26,23 @@ function App() {
         console.error('Failed to parse todos from localStorage');
       }
     }
+    if (savedExpanded) {
+      try {
+        setExpandedTodos(new Set(JSON.parse(savedExpanded)));
+      } catch (e) {
+        console.error('Failed to parse expanded todos from localStorage');
+      }
+    }
   }, []);
 
-  // Save todos to localStorage whenever they change
+  // Save todos and expanded state to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('todos', JSON.stringify(todos));
   }, [todos]);
+
+  useEffect(() => {
+    localStorage.setItem('expandedTodos', JSON.stringify(Array.from(expandedTodos)));
+  }, [expandedTodos]);
 
   const addTodo = () => {
     if (inputValue.trim() !== '') {
@@ -41,6 +54,7 @@ function App() {
         dueDate: dueDate || null,
         category: category || 'General',
         createdAt: new Date().toISOString(),
+        subtasks: []
       };
       setTodos([...todos, newTodo]);
       setInputValue('');
@@ -51,14 +65,28 @@ function App() {
 
   const toggleTodo = (id) => {
     setTodos(
-      todos.map((todo) =>
-        todo.id === id ? { ...todo, completed: !todo.completed } : todo
-      )
+      todos.map((todo) => {
+        if (todo.id === id) {
+          // If the todo has subtasks, mark all subtasks as completed when the main task is completed
+          const updatedSubtasks = todo.subtasks.map(subtask => ({
+            ...subtask,
+            completed: !todo.completed
+          }));
+          return { ...todo, completed: !todo.completed, subtasks: updatedSubtasks };
+        }
+        return todo;
+      })
     );
   };
 
   const deleteTodo = (id) => {
     setTodos(todos.filter((todo) => todo.id !== id));
+    // Remove from expanded state if deleted
+    if (expandedTodos.has(id)) {
+      const newExpanded = new Set(expandedTodos);
+      newExpanded.delete(id);
+      setExpandedTodos(newExpanded);
+    }
   };
 
   const startEdit = (todo) => {
@@ -118,7 +146,95 @@ function App() {
     today.setHours(0, 0, 0, 0);
     const due = new Date(dueDate);
     due.setHours(0, 0, 0, 0);
-    return due < today && !todos.find(t => t.dueDate === dueDate)?.completed;
+    return due < today;
+  };
+
+  const toggleExpand = (id) => {
+    const newExpanded = new Set(expandedTodos);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedTodos(newExpanded);
+  };
+
+  // Subtask functions
+  const addSubtask = (parentId, subtaskText, subtaskPriority = 'medium', subtaskDueDate = null, subtaskCategory = '') => {
+    if (subtaskText.trim() === '') return;
+    
+    const newSubtask = {
+      id: Date.now(),
+      text: subtaskText.trim(),
+      completed: false,
+      priority: subtaskPriority,
+      dueDate: subtaskDueDate || null,
+      category: subtaskCategory || 'General',
+      createdAt: new Date().toISOString()
+    };
+    
+    setTodos(todos.map(todo => {
+      if (todo.id === parentId) {
+        return { ...todo, subtasks: [...todo.subtasks, newSubtask] };
+      }
+      return todo;
+    }));
+    
+    // Expand the parent task when adding a subtask
+    if (!expandedTodos.has(parentId)) {
+      const newExpanded = new Set(expandedTodos);
+      newExpanded.add(parentId);
+      setExpandedTodos(newExpanded);
+    }
+  };
+
+  const toggleSubtask = (parentId, subtaskId) => {
+    setTodos(todos.map(todo => {
+      if (todo.id === parentId) {
+        const updatedSubtasks = todo.subtasks.map(subtask => {
+          if (subtask.id === subtaskId) {
+            return { ...subtask, completed: !subtask.completed };
+          }
+          return subtask;
+        });
+        
+        // Check if all subtasks are completed
+        const allSubtasksCompleted = updatedSubtasks.length > 0 && 
+          updatedSubtasks.every(subtask => subtask.completed);
+        
+        return { 
+          ...todo, 
+          subtasks: updatedSubtasks,
+          completed: allSubtasksCompleted ? true : todo.completed
+        };
+      }
+      return todo;
+    }));
+  };
+
+  const deleteSubtask = (parentId, subtaskId) => {
+    setTodos(todos.map(todo => {
+      if (todo.id === parentId) {
+        const updatedSubtasks = todo.subtasks.filter(subtask => subtask.id !== subtaskId);
+        return { ...todo, subtasks: updatedSubtasks };
+      }
+      return todo;
+    }));
+  };
+
+  const editSubtask = (parentId, subtaskId, newText) => {
+    setTodos(todos.map(todo => {
+      if (todo.id === parentId) {
+        const updatedSubtasks = todo.subtasks.map(subtask => {
+          if (subtask.id === subtaskId) {
+            return { ...subtask, text: newText.trim() };
+          }
+          return subtask;
+        });
+        return { ...todo, subtasks: updatedSubtasks };
+      }
+      return todo;
+    }));
   };
 
   const filteredTodos = todos
@@ -129,13 +245,20 @@ function App() {
     })
     .filter(todo => 
       todo.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      todo.category.toLowerCase().includes(searchTerm.toLowerCase())
+      todo.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      todo.subtasks.some(subtask => 
+        subtask.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        subtask.category.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     );
 
   const stats = {
     total: todos.length,
     completed: todos.filter(t => t.completed).length,
     active: todos.filter(t => !t.completed).length,
+    totalSubtasks: todos.reduce((acc, todo) => acc + todo.subtasks.length, 0),
+    completedSubtasks: todos.reduce((acc, todo) => 
+      acc + todo.subtasks.filter(subtask => subtask.completed).length, 0)
   };
 
   return (
@@ -148,6 +271,9 @@ function App() {
           <span>Total: {stats.total}</span>
           <span>Active: {stats.active}</span>
           <span>Completed: {stats.completed}</span>
+          {stats.totalSubtasks > 0 && (
+            <span>Subtasks: {stats.completedSubtasks}/{stats.totalSubtasks}</span>
+          )}
         </div>
 
         {/* Search and Filter */}
@@ -271,12 +397,26 @@ function App() {
                   ) : (
                     <>
                       <div className="todo-main">
-                        <span 
-                          className="todo-text" 
-                          onClick={() => toggleTodo(todo.id)}
-                        >
-                          {todo.text}
-                        </span>
+                        <div className="todo-header">
+                          <span 
+                            className="todo-text" 
+                            onClick={() => toggleTodo(todo.id)}
+                          >
+                            {todo.text}
+                          </span>
+                          {todo.subtasks.length > 0 && (
+                            <button 
+                              className="expand-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpand(todo.id);
+                              }}
+                              title={expandedTodos.has(todo.id) ? "Collapse subtasks" : "Expand subtasks"}
+                            >
+                              {expandedTodos.has(todo.id) ? '▼' : '▶'}
+                            </button>
+                          )}
+                        </div>
                         <div className="todo-meta">
                           {todo.category && (
                             <span className="todo-category">
@@ -286,6 +426,11 @@ function App() {
                           {todo.dueDate && (
                             <span className={`todo-due ${isOverdue(todo.dueDate) ? 'overdue-date' : ''}`}>
                               {new Date(todo.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
+                          {todo.subtasks.length > 0 && (
+                            <span className="subtask-count">
+                              {todo.subtasks.filter(st => st.completed).length}/{todo.subtasks.length} subtasks
                             </span>
                           )}
                         </div>
@@ -314,6 +459,95 @@ function App() {
                     </>
                   )}
                 </div>
+                
+                {/* Subtasks Section */}
+                {todo.subtasks.length > 0 && expandedTodos.has(todo.id) && (
+                  <div className="subtasks-container">
+                    {todo.subtasks.map(subtask => (
+                      <div 
+                        key={subtask.id} 
+                        className={`subtask-item ${subtask.completed ? 'completed' : ''} ${isOverdue(subtask.dueDate) ? 'overdue' : ''}`}
+                      >
+                        <div className="subtask-content">
+                          <span 
+                            className="subtask-text" 
+                            onClick={() => toggleSubtask(todo.id, subtask.id)}
+                          >
+                            {subtask.text}
+                          </span>
+                          <div className="subtask-meta">
+                            {subtask.category && (
+                              <span className="subtask-category">
+                                {subtask.category}
+                              </span>
+                            )}
+                            {subtask.dueDate && (
+                              <span className={`subtask-due ${isOverdue(subtask.dueDate) ? 'overdue-date' : ''}`}>
+                                {new Date(subtask.dueDate).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="subtask-actions">
+                            <span 
+                              className="priority-indicator"
+                              style={{ backgroundColor: getPriorityColor(subtask.priority) }}
+                              title={`Priority: ${subtask.priority.charAt(0).toUpperCase() + subtask.priority.slice(1)}`}
+                            />
+                            <button 
+                              className="edit-btn" 
+                              onClick={() => {
+                                const newText = prompt('Edit subtask:', subtask.text);
+                                if (newText !== null) {
+                                  editSubtask(todo.id, subtask.id, newText);
+                                }
+                              }}
+                              title="Edit"
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              className="delete-btn" 
+                              onClick={() => deleteSubtask(todo.id, subtask.id)}
+                              title="Delete"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Add Subtask Form */}
+                    <div className="add-subtask-form">
+                      <input
+                        type="text"
+                        placeholder="Add a subtask..."
+                        className="subtask-input"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const input = e.target;
+                            if (input.value.trim() !== '') {
+                              addSubtask(todo.id, input.value);
+                              input.value = '';
+                            }
+                          }
+                        }}
+                      />
+                      <button 
+                        className="add-subtask-btn"
+                        onClick={() => {
+                          const input = document.querySelector(`#subtask-input-${todo.id}`);
+                          if (input && input.value.trim() !== '') {
+                            addSubtask(todo.id, input.value);
+                            input.value = '';
+                          }
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}
