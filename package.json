@@ -9,13 +9,15 @@
     "dev:client": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "serve -s dist",
     "test:webhook": "node scripts/test-webhook.js"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "axios": "^1.6.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "serve": "^14.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
