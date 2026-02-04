@@ -1,558 +1,422 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 
+const WS_URL = `ws://${window.location.hostname}:3001/ws`;
+const API_URL = `http://${window.location.hostname}:3001/api`;
+
 function App() {
-  const [todos, setTodos] = useState([]);
-  const [inputValue, setInputValue] = useState('');
-  const [priority, setPriority] = useState('medium');
-  const [dueDate, setDueDate] = useState('');
-  const [category, setCategory] = useState('');
-  const [categories, setCategories] = useState(['Work', 'Personal', 'Shopping']);
-  const [newCategory, setNewCategory] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState('');
-  const [expandedTodos, setExpandedTodos] = useState(new Set());
+  // State
+  const [status, setStatus] = useState({
+    connected: false,
+    loggedIn: false,
+    loading: false,
+    error: null,
+    userName: null,
+    loginStep: 'idle'
+  });
+  const [conversations, setConversations] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [selectedThread, setSelectedThread] = useState(null);
+  const [messageInput, setMessageInput] = useState('');
+  const [loginForm, setLoginForm] = useState({ email: '', password: '', code: '' });
+  const [screenshot, setScreenshot] = useState(null);
+  const [autoReply, setAutoReply] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
+  
+  const wsRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
-  // Load todos from localStorage on initial render
+  // WebSocket connection
   useEffect(() => {
-    const savedTodos = localStorage.getItem('todos');
-    const savedExpanded = localStorage.getItem('expandedTodos');
-    if (savedTodos) {
-      try {
-        setTodos(JSON.parse(savedTodos));
-      } catch (e) {
-        console.error('Failed to parse todos from localStorage');
-      }
-    }
-    if (savedExpanded) {
-      try {
-        setExpandedTodos(new Set(JSON.parse(savedExpanded)));
-      } catch (e) {
-        console.error('Failed to parse expanded todos from localStorage');
-      }
-    }
-  }, []);
-
-  // Save todos and expanded state to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('todos', JSON.stringify(todos));
-  }, [todos]);
-
-  useEffect(() => {
-    localStorage.setItem('expandedTodos', JSON.stringify(Array.from(expandedTodos)));
-  }, [expandedTodos]);
-
-  const addTodo = () => {
-    if (inputValue.trim() !== '') {
-      const newTodo = {
-        id: Date.now(),
-        text: inputValue.trim(),
-        completed: false,
-        priority: priority,
-        dueDate: dueDate || null,
-        category: category || 'General',
-        createdAt: new Date().toISOString(),
-        subtasks: []
+    const connectWebSocket = () => {
+      const ws = new WebSocket(WS_URL);
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        setWsConnected(true);
+        ws.send(JSON.stringify({ action: 'getStatus' }));
       };
-      setTodos([...todos, newTodo]);
-      setInputValue('');
-      setDueDate('');
-      setCategory('');
-    }
-  };
-
-  const toggleTodo = (id) => {
-    setTodos(
-      todos.map((todo) => {
-        if (todo.id === id) {
-          // If the todo has subtasks, mark all subtasks as completed when the main task is completed
-          const updatedSubtasks = todo.subtasks.map(subtask => ({
-            ...subtask,
-            completed: !todo.completed
-          }));
-          return { ...todo, completed: !todo.completed, subtasks: updatedSubtasks };
+      
+      ws.onmessage = (event) => {
+        const { type, data } = JSON.parse(event.data);
+        
+        switch (type) {
+          case 'status':
+            setStatus(data);
+            break;
+          case 'conversations':
+            setConversations(data);
+            break;
+          case 'messages':
+            if (data.threadId === selectedThread) {
+              setMessages(data.messages);
+            }
+            break;
+          case 'newMessage':
+            console.log('New message:', data);
+            break;
+          case 'screenshot':
+            setScreenshot(data.screenshot);
+            break;
+          case 'error':
+            console.error('Server error:', data.message);
+            break;
+          default:
+            console.log('Unknown message type:', type);
         }
-        return todo;
-      })
-    );
-  };
-
-  const deleteTodo = (id) => {
-    setTodos(todos.filter((todo) => todo.id !== id));
-    // Remove from expanded state if deleted
-    if (expandedTodos.has(id)) {
-      const newExpanded = new Set(expandedTodos);
-      newExpanded.delete(id);
-      setExpandedTodos(newExpanded);
-    }
-  };
-
-  const startEdit = (todo) => {
-    setEditingId(todo.id);
-    setEditText(todo.text);
-  };
-
-  const saveEdit = (id) => {
-    setTodos(
-      todos.map((todo) =>
-        todo.id === id ? { ...todo, text: editText.trim() } : todo
-      )
-    );
-    setEditingId(null);
-    setEditText('');
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditText('');
-  };
-
-  const addCategory = () => {
-    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      setCategories([...categories, newCategory.trim()]);
-      setCategory(newCategory.trim());
-      setNewCategory('');
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
-      if (editingId) {
-        saveEdit(editingId);
-      } else {
-        addTodo();
-      }
-    }
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high':
-        return '#ef4444';
-      case 'medium':
-        return '#f59e0b';
-      case 'low':
-        return '#10b981';
-      default:
-        return '#6b7280';
-    }
-  };
-
-  const isOverdue = (dueDate) => {
-    if (!dueDate) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDate);
-    due.setHours(0, 0, 0, 0);
-    return due < today;
-  };
-
-  const toggleExpand = (id) => {
-    const newExpanded = new Set(expandedTodos);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedTodos(newExpanded);
-  };
-
-  // Subtask functions
-  const addSubtask = (parentId, subtaskText, subtaskPriority = 'medium', subtaskDueDate = null, subtaskCategory = '') => {
-    if (subtaskText.trim() === '') return;
-    
-    const newSubtask = {
-      id: Date.now(),
-      text: subtaskText.trim(),
-      completed: false,
-      priority: subtaskPriority,
-      dueDate: subtaskDueDate || null,
-      category: subtaskCategory || 'General',
-      createdAt: new Date().toISOString()
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        setWsConnected(false);
+        // Reconnect after delay
+        setTimeout(connectWebSocket, 3000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+      
+      wsRef.current = ws;
     };
-    
-    setTodos(todos.map(todo => {
-      if (todo.id === parentId) {
-        return { ...todo, subtasks: [...todo.subtasks, newSubtask] };
+
+    connectWebSocket();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
       }
-      return todo;
-    }));
-    
-    // Expand the parent task when adding a subtask
-    if (!expandedTodos.has(parentId)) {
-      const newExpanded = new Set(expandedTodos);
-      newExpanded.add(parentId);
-      setExpandedTodos(newExpanded);
+    };
+  }, [selectedThread]);
+
+  // Scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // API calls
+  const startLogin = async () => {
+    try {
+      const res = await fetch(`${API_URL}/login/start`, { method: 'POST' });
+      const data = await res.json();
+      if (data.screenshot) setScreenshot(data.screenshot);
+    } catch (error) {
+      console.error('Start login error:', error);
     }
   };
 
-  const toggleSubtask = (parentId, subtaskId) => {
-    setTodos(todos.map(todo => {
-      if (todo.id === parentId) {
-        const updatedSubtasks = todo.subtasks.map(subtask => {
-          if (subtask.id === subtaskId) {
-            return { ...subtask, completed: !subtask.completed };
-          }
-          return subtask;
-        });
-        
-        // Check if all subtasks are completed
-        const allSubtasksCompleted = updatedSubtasks.length > 0 && 
-          updatedSubtasks.every(subtask => subtask.completed);
-        
-        return { 
-          ...todo, 
-          subtasks: updatedSubtasks,
-          completed: allSubtasksCompleted ? true : todo.completed
-        };
-      }
-      return todo;
-    }));
+  const submitCredentials = async () => {
+    try {
+      const res = await fetch(`${API_URL}/login/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginForm.email, password: loginForm.password })
+      });
+      const data = await res.json();
+      if (data.screenshot) setScreenshot(data.screenshot);
+    } catch (error) {
+      console.error('Credentials error:', error);
+    }
   };
 
-  const deleteSubtask = (parentId, subtaskId) => {
-    setTodos(todos.map(todo => {
-      if (todo.id === parentId) {
-        const updatedSubtasks = todo.subtasks.filter(subtask => subtask.id !== subtaskId);
-        return { ...todo, subtasks: updatedSubtasks };
-      }
-      return todo;
-    }));
+  const submit2FA = async () => {
+    try {
+      const res = await fetch(`${API_URL}/login/2fa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: loginForm.code })
+      });
+      const data = await res.json();
+      if (data.screenshot) setScreenshot(data.screenshot);
+    } catch (error) {
+      console.error('2FA error:', error);
+    }
   };
 
-  const editSubtask = (parentId, subtaskId, newText) => {
-    setTodos(todos.map(todo => {
-      if (todo.id === parentId) {
-        const updatedSubtasks = todo.subtasks.map(subtask => {
-          if (subtask.id === subtaskId) {
-            return { ...subtask, text: newText.trim() };
-          }
-          return subtask;
-        });
-        return { ...todo, subtasks: updatedSubtasks };
-      }
-      return todo;
-    }));
+  const logout = async () => {
+    try {
+      await fetch(`${API_URL}/logout`, { method: 'POST' });
+      setSelectedThread(null);
+      setMessages([]);
+      setConversations([]);
+      setScreenshot(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
-  const filteredTodos = todos
-    .filter(todo => {
-      if (filter === 'active') return !todo.completed;
-      if (filter === 'completed') return todo.completed;
-      return true;
-    })
-    .filter(todo => 
-      todo.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      todo.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      todo.subtasks.some(subtask => 
-        subtask.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        subtask.category.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-
-  const stats = {
-    total: todos.length,
-    completed: todos.filter(t => t.completed).length,
-    active: todos.filter(t => !t.completed).length,
-    totalSubtasks: todos.reduce((acc, todo) => acc + todo.subtasks.length, 0),
-    completedSubtasks: todos.reduce((acc, todo) => 
-      acc + todo.subtasks.filter(subtask => subtask.completed).length, 0)
+  const sendMessage = async () => {
+    if (!messageInput.trim() || !selectedThread) return;
+    
+    try {
+      await fetch(`${API_URL}/messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId: selectedThread, text: messageInput })
+      });
+      setMessageInput('');
+    } catch (error) {
+      console.error('Send message error:', error);
+    }
   };
 
-  return (
-    <div className="App">
-      <header className="App-header">
-        <h1>✨ Elegant Todo</h1>
-        
-        {/* Stats */}
-        <div className="stats">
-          <span>Total: {stats.total}</span>
-          <span>Active: {stats.active}</span>
-          <span>Completed: {stats.completed}</span>
-          {stats.totalSubtasks > 0 && (
-            <span>Subtasks: {stats.completedSubtasks}/{stats.totalSubtasks}</span>
-          )}
+  const selectConversation = async (threadId) => {
+    setSelectedThread(threadId);
+    try {
+      await fetch(`${API_URL}/navigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId })
+      });
+    } catch (error) {
+      console.error('Navigate error:', error);
+    }
+  };
+
+  const toggleAutoReply = async () => {
+    const newState = !autoReply;
+    setAutoReply(newState);
+    try {
+      await fetch(`${API_URL}/auto-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newState })
+      });
+    } catch (error) {
+      console.error('Toggle auto-reply error:', error);
+    }
+  };
+
+  const refreshScreenshot = async () => {
+    try {
+      const res = await fetch(`${API_URL}/screenshot`);
+      const data = await res.json();
+      if (data.screenshot) setScreenshot(data.screenshot);
+    } catch (error) {
+      console.error('Screenshot error:', error);
+    }
+  };
+
+  // Render login form
+  const renderLogin = () => (
+    <div className="login-container">
+      <div className="login-card">
+        <div className="login-header">
+          <h2>🤖 Fred Messenger</h2>
+          <p>Sign in with your Facebook account</p>
         </div>
 
-        {/* Search and Filter */}
-        <div className="search-filter">
-          <input
-            type="text"
-            placeholder="Search todos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-          <select 
-            value={filter} 
-            onChange={(e) => setFilter(e.target.value)}
-            className="filter-select"
+        {status.loginStep === 'idle' || status.loginStep === null ? (
+          <button 
+            className="start-btn"
+            onClick={startLogin}
+            disabled={status.loading}
           >
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
-
-        {/* Add Todo Form */}
-        <div className="input-container">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="What needs to be done?"
-            className="todo-input"
-          />
-          
-          <div className="form-row">
-            <select 
-              value={priority} 
-              onChange={(e) => setPriority(e.target.value)}
-              className="priority-select"
-            >
-              <option value="low">Low Priority</option>
-              <option value="medium">Medium Priority</option>
-              <option value="high">High Priority</option>
-            </select>
-            
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="date-input"
-            />
-          </div>
-
-          <div className="form-row">
-            <select 
-              value={category} 
-              onChange={(e) => setCategory(e.target.value)}
-              className="category-select"
-            >
-              <option value="">Select Category</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-            
-            <div className="add-category">
-              <input
-                type="text"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                placeholder="New category"
-                className="new-category-input"
-              />
-              <button onClick={addCategory} className="add-category-btn">
-                +
-              </button>
-            </div>
-          </div>
-
-          <button onClick={addTodo} className="add-btn">
-            Add Todo
+            {status.loading ? 'Starting...' : 'Start Login'}
           </button>
+        ) : status.loginStep === 'credentials' ? (
+          <div className="login-form">
+            <input
+              type="email"
+              placeholder="Email or Phone"
+              value={loginForm.email}
+              onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+              className="login-input"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={loginForm.password}
+              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+              className="login-input"
+            />
+            <button 
+              className="submit-btn"
+              onClick={submitCredentials}
+              disabled={status.loading || !loginForm.email || !loginForm.password}
+            >
+              {status.loading ? 'Logging in...' : 'Log In'}
+            </button>
+          </div>
+        ) : status.loginStep === '2fa' ? (
+          <div className="login-form">
+            <p className="twofa-notice">Enter your 2FA verification code</p>
+            <input
+              type="text"
+              placeholder="Verification Code"
+              value={loginForm.code}
+              onChange={(e) => setLoginForm({ ...loginForm, code: e.target.value })}
+              className="login-input"
+              autoComplete="one-time-code"
+            />
+            <button 
+              className="submit-btn"
+              onClick={submit2FA}
+              disabled={status.loading || !loginForm.code}
+            >
+              {status.loading ? 'Verifying...' : 'Verify'}
+            </button>
+          </div>
+        ) : null}
+
+        {status.error && (
+          <div className="error-message">{status.error}</div>
+        )}
+
+        {screenshot && (
+          <div className="screenshot-preview">
+            <h4>Browser Preview</h4>
+            <img src={screenshot} alt="Browser" />
+            <button onClick={refreshScreenshot} className="refresh-btn">
+              🔄 Refresh
+            </button>
+          </div>
+        )}
+
+        <div className="security-note">
+          <p>🔒 Your credentials are sent directly to Facebook.</p>
+          <p>We use an embedded browser for secure authentication.</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Render main chat interface
+  const renderChat = () => (
+    <div className="chat-container">
+      {/* Sidebar */}
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <h2>💬 Chats</h2>
+          <div className="user-info">
+            <span className="user-name">{status.userName || 'User'}</span>
+            <button onClick={logout} className="logout-btn" title="Logout">
+              🚪
+            </button>
+          </div>
+        </div>
+        
+        <div className="auto-reply-toggle">
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={autoReply}
+              onChange={toggleAutoReply}
+            />
+            <span className="toggle-slider"></span>
+            <span className="toggle-text">🤖 Fred Auto-Reply</span>
+          </label>
         </div>
 
-        {/* Todo List */}
-        <div className="todo-list">
-          {filteredTodos.length === 0 ? (
-            <p className="empty-state">
-              {searchTerm || filter !== 'all' 
-                ? 'No matching todos found.' 
-                : 'No todos yet. Add one above!'}
-            </p>
+        <div className="conversation-list">
+          {conversations.length === 0 ? (
+            <div className="empty-conversations">
+              <p>Loading conversations...</p>
+            </div>
           ) : (
-            filteredTodos.map((todo) => (
-              <div 
-                key={todo.id} 
-                className={`todo-item ${todo.completed ? 'completed' : ''} ${isOverdue(todo.dueDate) ? 'overdue' : ''}`}
+            conversations.map((conv) => (
+              <div
+                key={conv.id}
+                className={`conversation-item ${selectedThread === conv.id ? 'selected' : ''} ${conv.unread ? 'unread' : ''}`}
+                onClick={() => selectConversation(conv.id)}
               >
-                <div className="todo-content">
-                  {editingId === todo.id ? (
-                    <div className="edit-form">
-                      <input
-                        type="text"
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') saveEdit(todo.id);
-                          if (e.key === 'Escape') cancelEdit();
-                        }}
-                        className="edit-input"
-                        autoFocus
-                      />
-                      <div className="edit-actions">
-                        <button onClick={() => saveEdit(todo.id)} className="save-btn">
-                          Save
-                        </button>
-                        <button onClick={cancelEdit} className="cancel-btn">
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
+                <div className="conv-avatar">
+                  {conv.avatar ? (
+                    <img src={conv.avatar} alt={conv.name} />
                   ) : (
-                    <>
-                      <div className="todo-main">
-                        <div className="todo-header">
-                          <span 
-                            className="todo-text" 
-                            onClick={() => toggleTodo(todo.id)}
-                          >
-                            {todo.text}
-                          </span>
-                          {todo.subtasks.length > 0 && (
-                            <button 
-                              className="expand-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleExpand(todo.id);
-                              }}
-                              title={expandedTodos.has(todo.id) ? "Collapse subtasks" : "Expand subtasks"}
-                            >
-                              {expandedTodos.has(todo.id) ? '▼' : '▶'}
-                            </button>
-                          )}
-                        </div>
-                        <div className="todo-meta">
-                          {todo.category && (
-                            <span className="todo-category">
-                              {todo.category}
-                            </span>
-                          )}
-                          {todo.dueDate && (
-                            <span className={`todo-due ${isOverdue(todo.dueDate) ? 'overdue-date' : ''}`}>
-                              {new Date(todo.dueDate).toLocaleDateString()}
-                            </span>
-                          )}
-                          {todo.subtasks.length > 0 && (
-                            <span className="subtask-count">
-                              {todo.subtasks.filter(st => st.completed).length}/{todo.subtasks.length} subtasks
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="todo-actions">
-                        <span 
-                          className="priority-indicator"
-                          style={{ backgroundColor: getPriorityColor(todo.priority) }}
-                          title={`Priority: ${todo.priority.charAt(0).toUpperCase() + todo.priority.slice(1)}`}
-                        />
-                        <button 
-                          className="edit-btn" 
-                          onClick={() => startEdit(todo)}
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button 
-                          className="delete-btn" 
-                          onClick={() => deleteTodo(todo.id)}
-                          title="Delete"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </>
+                    <div className="avatar-placeholder">{conv.name[0]}</div>
                   )}
                 </div>
-                
-                {/* Subtasks Section */}
-                {todo.subtasks.length > 0 && expandedTodos.has(todo.id) && (
-                  <div className="subtasks-container">
-                    {todo.subtasks.map(subtask => (
-                      <div 
-                        key={subtask.id} 
-                        className={`subtask-item ${subtask.completed ? 'completed' : ''} ${isOverdue(subtask.dueDate) ? 'overdue' : ''}`}
-                      >
-                        <div className="subtask-content">
-                          <span 
-                            className="subtask-text" 
-                            onClick={() => toggleSubtask(todo.id, subtask.id)}
-                          >
-                            {subtask.text}
-                          </span>
-                          <div className="subtask-meta">
-                            {subtask.category && (
-                              <span className="subtask-category">
-                                {subtask.category}
-                              </span>
-                            )}
-                            {subtask.dueDate && (
-                              <span className={`subtask-due ${isOverdue(subtask.dueDate) ? 'overdue-date' : ''}`}>
-                                {new Date(subtask.dueDate).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                          <div className="subtask-actions">
-                            <span 
-                              className="priority-indicator"
-                              style={{ backgroundColor: getPriorityColor(subtask.priority) }}
-                              title={`Priority: ${subtask.priority.charAt(0).toUpperCase() + subtask.priority.slice(1)}`}
-                            />
-                            <button 
-                              className="edit-btn" 
-                              onClick={() => {
-                                const newText = prompt('Edit subtask:', subtask.text);
-                                if (newText !== null) {
-                                  editSubtask(todo.id, subtask.id, newText);
-                                }
-                              }}
-                              title="Edit"
-                            >
-                              ✏️
-                            </button>
-                            <button 
-                              className="delete-btn" 
-                              onClick={() => deleteSubtask(todo.id, subtask.id)}
-                              title="Delete"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {/* Add Subtask Form */}
-                    <div className="add-subtask-form">
-                      <input
-                        type="text"
-                        placeholder="Add a subtask..."
-                        className="subtask-input"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const input = e.target;
-                            if (input.value.trim() !== '') {
-                              addSubtask(todo.id, input.value);
-                              input.value = '';
-                            }
-                          }
-                        }}
-                      />
-                      <button 
-                        className="add-subtask-btn"
-                        onClick={() => {
-                          const input = document.querySelector(`#subtask-input-${todo.id}`);
-                          if (input && input.value.trim() !== '') {
-                            addSubtask(todo.id, input.value);
-                            input.value = '';
-                          }
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <div className="conv-info">
+                  <span className="conv-name">{conv.name}</span>
+                  <span className="conv-preview">{conv.preview}</span>
+                </div>
+                <span className="conv-time">{conv.time}</span>
               </div>
             ))
           )}
         </div>
+      </div>
+
+      {/* Chat area */}
+      <div className="chat-area">
+        {selectedThread ? (
+          <>
+            <div className="chat-header">
+              <h3>{conversations.find(c => c.id === selectedThread)?.name || 'Chat'}</h3>
+              <button onClick={refreshScreenshot} className="view-btn" title="View browser">
+                👁️
+              </button>
+            </div>
+
+            <div className="messages-container">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`message ${msg.sent ? 'sent' : 'received'}`}
+                >
+                  <div className="message-content">
+                    <p>{msg.text}</p>
+                    {msg.time && <span className="message-time">{msg.time}</span>}
+                  </div>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="message-input-container">
+              <input
+                type="text"
+                placeholder="Type a message..."
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                className="message-input"
+              />
+              <button onClick={sendMessage} className="send-btn" disabled={!messageInput.trim()}>
+                📤
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="no-chat-selected">
+            <div className="placeholder-content">
+              <span className="placeholder-icon">💬</span>
+              <h3>Select a conversation</h3>
+              <p>Choose a chat from the sidebar to start messaging</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Screenshot modal */}
+      {screenshot && (
+        <div className="screenshot-modal" onClick={() => setScreenshot(null)}>
+          <div className="screenshot-content" onClick={(e) => e.stopPropagation()}>
+            <button className="close-btn" onClick={() => setScreenshot(null)}>✕</button>
+            <h3>Browser View</h3>
+            <img src={screenshot} alt="Browser view" />
+            <button onClick={refreshScreenshot} className="refresh-btn">🔄 Refresh</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <div className="header-content">
+          <h1>🤖 Fred Messenger</h1>
+          <span className={`connection-status ${wsConnected ? 'connected' : 'disconnected'}`}>
+            {wsConnected ? '● Connected' : '○ Disconnected'}
+          </span>
+        </div>
       </header>
+      
+      <main className="main-content">
+        {status.loggedIn ? renderChat() : renderLogin()}
+      </main>
     </div>
   );
 }
