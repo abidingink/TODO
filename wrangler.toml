@@ -1,0 +1,18 @@
+# Cloudflare Pages configuration
+name = "fred-messenger"
+compatibility_date = "2026-02-04"
+
+# Pages build configuration
+[build]
+command = "npm run build"
+output_dir = "dist"
+
+# Environment variables (configure these in Cloudflare dashboard)
+[vars]
+# FACEBOOK_EMAIL = "your-email@example.com"
+# FACEBOOK_PASSWORD = "your-password"
+# MOLTBOT_WEBHOOK_URL = "your-moltbot-webhook-url"
+
+# Pages-specific settings
+[pages]
+functions = "./functions"
