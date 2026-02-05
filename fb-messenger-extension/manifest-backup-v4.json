@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "@fred Bot - Diagnostic",
+  "version": "3.0.0",
+  "description": "Diagnostic version to test if extension loads",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "*://*.messenger.com/*",
+    "*://*.facebook.com/*",
+    "*://*.facebook.com/*"
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "@fred Bot Settings"
+  },
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["*://*.messenger.com/*", "*://*.facebook.com/*"],
+      "js": ["content-test.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}
