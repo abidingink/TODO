@@ -1,18 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "@fred Bot - Diagnostic",
-  "version": "3.0.0",
-  "description": "Diagnostic version to test if extension loads",
+  "name": "@fred Messenger Bot - Simple",
+  "version": "2.0.0",
+  "description": "Simple @fred bot for Facebook Messenger",
   
   "permissions": [
     "activeTab",
-    "storage",
-    "scripting"
+    "storage"
   ],
   
   "host_permissions": [
     "*://*.messenger.com/*",
-    "*://*.facebook.com/*",
     "*://*.facebook.com/*"
   ],
   
@@ -21,15 +19,11 @@
     "default_title": "@fred Bot Settings"
   },
   
-  "background": {
-    "service_worker": "background.js"
-  },
-  
   "content_scripts": [
     {
       "matches": ["*://*.messenger.com/*", "*://*.facebook.com/*"],
-      "js": ["content-test.js"],
-      "run_at": "document_start",
+      "js": ["content-simple.js"],
+      "run_at": "document_end",
       "all_frames": true
     }
   ]
