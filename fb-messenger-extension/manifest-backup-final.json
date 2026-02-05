@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "@fred Bot - Manual Control",
+  "version": "4.0.0",
+  "description": "Manual control version - use popup to inject bot",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "*://*.messenger.com/*",
+    "*://*.facebook.com/*"
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "@fred Bot - Manual Control"
+  },
+  
+  "background": {
+    "service_worker": "background.js"
+  }
+}
