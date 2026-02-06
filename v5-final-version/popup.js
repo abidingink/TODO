@@ -1,7 +1,7 @@
-// VERSION 5.3.0 - Enhanced with CORS error handling and better debugging
-console.log('🤖 @fred Bot Popup: VERSION 5.3.0 - CORS Enhanced!');
+// VERSION 5.4.0 - Enhanced with CORS error handling and better debugging
+console.log('🤖 @fred Bot Popup: VERSION 5.4.0 - CORS Enhanced!');
 
-let debugLog = ['=== VERSION 5.3.0 DEBUG LOG - CORS ENHANCED ==='];
+let debugLog = ['=== VERSION 5.4.0 DEBUG LOG - CORS ENHANCED ==='];
 let settings = {
   gatewayUrl: '',
   sessionKey: ''
@@ -45,9 +45,9 @@ chrome.storage.sync.get(['gatewayUrl', 'sessionKey'], function(data) {
     log('Session key loaded', 'success');
   }
   if (!data.gatewayUrl && !data.sessionKey) {
-    showStatus('🔧 VERSION 5.3.0 - CORS Enhanced! Enter your settings.', 'info');
+    showStatus('🔧 VERSION 5.4.0 - CORS Enhanced! Enter your settings.', 'info');
   } else {
-    showStatus('✅ Settings loaded - Version 5.3.0 CORS Enhanced!', 'success');
+    showStatus('✅ Settings loaded - Version 5.4.0 CORS Enhanced!', 'success');
   }
 });
 
@@ -71,7 +71,7 @@ document.getElementById('saveSettings').addEventListener('click', function() {
   };
   
   chrome.storage.sync.set(settings, function() {
-    showStatus('✅ Settings saved - Version 5.3.0 CORS Enhanced!', 'success');
+    showStatus('✅ Settings saved - Version 5.4.0 CORS Enhanced!', 'success');
     log('Settings saved successfully', 'success');
   });
 });
@@ -99,7 +99,7 @@ document.getElementById('testConnection').addEventListener('click', function() {
     },
     body: JSON.stringify({
       model: "moltbot",
-      input: "Connection test from @fred Bot extension VERSION 5.3.0 - CORS Enhanced",
+      input: "Connection test from @fred Bot extension VERSION 5.4.0 - CORS Enhanced",
       user: "test_user"
     })
   }).then(response => {
@@ -152,7 +152,7 @@ document.getElementById('injectBot').addEventListener('click', function() {
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: (gatewayUrl, sessionKey) => {
-        console.log('🤖 @fred Bot: VERSION 5.3.0 CORS ENHANCED INJECTION');
+        console.log('🤖 @fred Bot: VERSION 5.4.0 CORS ENHANCED INJECTION');
         
         // Remove existing button
         const existingButton = document.getElementById('fred-floating-button');
@@ -191,7 +191,7 @@ document.getElementById('injectBot').addEventListener('click', function() {
           if (isEnabled) {
             button.innerHTML = '🤖 Disable @fred Bot';
             button.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
-            alert('✅ @fred Bot VERSION 5.3.0 CORS ENHANCED is now ENABLED!\n\nType @fred in any chat to test.');
+            alert('✅ @fred Bot VERSION 5.4.0 CORS ENHANCED is now ENABLED!\n\nType @fred in any chat to test.');
           } else {
             button.innerHTML = '🤖 Enable @fred Bot';
             button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
@@ -323,14 +323,14 @@ document.getElementById('injectBot').addEventListener('click', function() {
         
         return {
           success: true,
-          message: '@fred Bot V5.3.0 with enhanced 1-on-1 chat support injected successfully!'
+          message: '@fred Bot V5.4.0 with enhanced 1-on-1 chat support injected successfully!'
         };
         };
       },
       args: [settings.gatewayUrl, settings.sessionKey]
     }).then(result => {
       showStatus('✅ Bot injected successfully!', 'success');
-      alert('🎉 SUCCESS!\n\n@fred Bot VERSION 5.3.0 CORS ENHANCED has been injected!\n\nClick the purple button to enable.');
+      alert('🎉 SUCCESS!\n\n@fred Bot VERSION 5.4.0 CORS ENHANCED has been injected!\n\nClick the purple button to enable.');
     }).catch(error => {
       showStatus('❌ Injection failed: ' + error.message, 'error');
     });
@@ -362,7 +362,47 @@ document.getElementById('checkStatus').addEventListener('click', function() {
   });
 });
 
-log('🚀 VERSION 5.3.0 CORS ENHANCED fully loaded!', 'success');
+log('🚀 VERSION 5.4.0 Button Fixed fully loaded!', 'success');
+
+// Process message function for enhanced detection
+function processMessage(text, messageElement) {
+  console.log(`[DEBUG] Processing message: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+  
+  // Send to Moltbot
+  fetch(settings.gatewayUrl + 'v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': 'Bearer ' + settings.sessionKey,
+      'x-moltbot-agent-id': 'main'
+    },
+    body: JSON.stringify({
+      model: "moltbot",
+      input: `[FB_MESSENGER] [CHAT_ID:${window.location.pathname}] [@fred mention] ${text}`,
+      context: {
+        source: "messenger_extension",
+        platform: "facebook_messenger",
+        chat_id: window.location.pathname,
+        sender: "facebook_user",
+        timestamp: new Date().toISOString(),
+        can_respond_independently: true,
+        is_autonomous: true,
+        message_type: text.includes('@fred') ? 'mention' : 'direct'
+      },
+      user: "messenger_extension_user"
+    })
+  }).then(response => response.json())
+  .then(data => {
+    const reply = data.response || data.output?.[0]?.content?.[0]?.text || 'Got your message!';
+    console.log(`[DEBUG] AI Response: "${reply.substring(0, 100)}${reply.length > 100 ? '...' : ''}"`);
+    alert(`🤖 @fred Bot Response:\n\n${reply}`);
+  })
+  .catch(error => {
+    console.error('[DEBUG] Error getting response:', error);
+    alert('❌ Error getting response from Moltbot');
+  });
+}
 
 // Process message function for enhanced detection
 function processMessage(text, messageElement) {
