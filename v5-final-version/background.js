@@ -1,5 +1,5 @@
-// Background script for @fred Bot V5.2.0 - CORS FIXED VERSION
-console.log('🤖 @fred Bot Background: VERSION 5.2.0 LOADED - CORS Fixed!');
+// Background script for @fred Bot V5.3.0 - CORS FIXED VERSION
+console.log('🤖 @fred Bot Background: VERSION 5.3.0 LOADED - CORS Fixed!');
 
 // Log extension lifecycle
 chrome.runtime.onInstalled.addListener(() => {

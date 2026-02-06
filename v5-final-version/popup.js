@@ -1,7 +1,7 @@
-// VERSION 5.2.0 - Enhanced with CORS error handling and better debugging
-console.log('🤖 @fred Bot Popup: VERSION 5.2.0 - CORS Enhanced!');
+// VERSION 5.3.0 - Enhanced with CORS error handling and better debugging
+console.log('🤖 @fred Bot Popup: VERSION 5.3.0 - CORS Enhanced!');
 
-let debugLog = ['=== VERSION 5.2.0 DEBUG LOG - CORS ENHANCED ==='];
+let debugLog = ['=== VERSION 5.3.0 DEBUG LOG - CORS ENHANCED ==='];
 let settings = {
   gatewayUrl: '',
   sessionKey: ''
@@ -45,9 +45,9 @@ chrome.storage.sync.get(['gatewayUrl', 'sessionKey'], function(data) {
     log('Session key loaded', 'success');
   }
   if (!data.gatewayUrl && !data.sessionKey) {
-    showStatus('🔧 VERSION 5.2.0 - CORS Enhanced! Enter your settings.', 'info');
+    showStatus('🔧 VERSION 5.3.0 - CORS Enhanced! Enter your settings.', 'info');
   } else {
-    showStatus('✅ Settings loaded - Version 5.2.0 CORS Enhanced!', 'success');
+    showStatus('✅ Settings loaded - Version 5.3.0 CORS Enhanced!', 'success');
   }
 });
 
@@ -71,7 +71,7 @@ document.getElementById('saveSettings').addEventListener('click', function() {
   };
   
   chrome.storage.sync.set(settings, function() {
-    showStatus('✅ Settings saved - Version 5.2.0 CORS Enhanced!', 'success');
+    showStatus('✅ Settings saved - Version 5.3.0 CORS Enhanced!', 'success');
     log('Settings saved successfully', 'success');
   });
 });
@@ -99,7 +99,7 @@ document.getElementById('testConnection').addEventListener('click', function() {
     },
     body: JSON.stringify({
       model: "moltbot",
-      input: "Connection test from @fred Bot extension VERSION 5.2.0 - CORS Enhanced",
+      input: "Connection test from @fred Bot extension VERSION 5.3.0 - CORS Enhanced",
       user: "test_user"
     })
   }).then(response => {
@@ -152,7 +152,7 @@ document.getElementById('injectBot').addEventListener('click', function() {
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: (gatewayUrl, sessionKey) => {
-        console.log('🤖 @fred Bot: VERSION 5.2.0 CORS ENHANCED INJECTION');
+        console.log('🤖 @fred Bot: VERSION 5.3.0 CORS ENHANCED INJECTION');
         
         // Remove existing button
         const existingButton = document.getElementById('fred-floating-button');
@@ -191,7 +191,7 @@ document.getElementById('injectBot').addEventListener('click', function() {
           if (isEnabled) {
             button.innerHTML = '🤖 Disable @fred Bot';
             button.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
-            alert('✅ @fred Bot VERSION 5.2.0 CORS ENHANCED is now ENABLED!\n\nType @fred in any chat to test.');
+            alert('✅ @fred Bot VERSION 5.3.0 CORS ENHANCED is now ENABLED!\n\nType @fred in any chat to test.');
           } else {
             button.innerHTML = '🤖 Enable @fred Bot';
             button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
@@ -259,13 +259,13 @@ document.getElementById('injectBot').addEventListener('click', function() {
         
         return {
           success: true,
-          message: '@fred Bot V5.2.0 CORS ENHANCED injected successfully!'
+          message: '@fred Bot V5.3.0 CORS ENHANCED injected successfully!'
         };
       },
       args: [settings.gatewayUrl, settings.sessionKey]
     }).then(result => {
       showStatus('✅ Bot injected successfully!', 'success');
-      alert('🎉 SUCCESS!\n\n@fred Bot VERSION 5.2.0 CORS ENHANCED has been injected!\n\nClick the purple button to enable.');
+      alert('🎉 SUCCESS!\n\n@fred Bot VERSION 5.3.0 CORS ENHANCED has been injected!\n\nClick the purple button to enable.');
     }).catch(error => {
       showStatus('❌ Injection failed: ' + error.message, 'error');
     });
@@ -297,4 +297,4 @@ document.getElementById('checkStatus').addEventListener('click', function() {
   });
 });
 
-log('🚀 VERSION 5.2.0 CORS ENHANCED fully loaded!', 'success');
+log('🚀 VERSION 5.3.0 CORS ENHANCED fully loaded!', 'success');
