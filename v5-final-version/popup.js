@@ -86,7 +86,7 @@ document.getElementById('testConnection').addEventListener('click', function() {
   log('Testing connection with CORS handling...', 'info');
   showStatus('🧪 Testing connection (CORS aware)...', 'info');
   
-  const testUrl = settings.gatewayUrl + 'api/v1/sessions/send';
+  const testUrl = settings.gatewayUrl + 'v1/responses';
   
   // Add CORS-friendly headers
   fetch(testUrl, {
@@ -94,11 +94,13 @@ document.getElementById('testConnection').addEventListener('click', function() {
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'Authorization': 'Bearer ' + settings.sessionKey,
+      'x-moltbot-agent-id': 'main'
     },
     body: JSON.stringify({
-      sessionKey: settings.sessionKey,
-      message: "Connection test from @fred Bot extension VERSION 5.2.0 - CORS Enhanced",
-      timeoutSeconds: 10
+      model: "moltbot",
+      input: "Connection test from @fred Bot extension VERSION 5.2.0 - CORS Enhanced",
+      user: "test_user"
     })
   }).then(response => {
     log('Response received - Status: ' + response.status, 'info');
@@ -216,15 +218,17 @@ document.getElementById('injectBot').addEventListener('click', function() {
               console.log('Found @fred mention:', text);
               
               // Send to Moltbot with enhanced format
-              fetch(gatewayUrl + 'api/v1/sessions/send', {
+              fetch(gatewayUrl + 'v1/responses', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   'Accept': 'application/json',
+                  'Authorization': 'Bearer ' + sessionKey,
+                  'x-moltbot-agent-id': 'main'
                 },
                 body: JSON.stringify({
-                  sessionKey: sessionKey,
-                  message: `[FB_MESSENGER] [CHAT_ID:${window.location.pathname}] [@fred mention] ${text}`,
+                  model: "moltbot",
+                  input: `[FB_MESSENGER] [CHAT_ID:${window.location.pathname}] [@fred mention] ${text}`,
                   context: {
                     source: "messenger_extension",
                     platform: "facebook_messenger",
@@ -234,7 +238,7 @@ document.getElementById('injectBot').addEventListener('click', function() {
                     can_respond_independently: true,
                     is_autonomous: true
                   },
-                  timeoutSeconds: 30
+                  user: "messenger_extension_user"
                 })
               }).then(response => response.json())
               .then(data => {
