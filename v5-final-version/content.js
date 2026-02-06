@@ -1,5 +1,5 @@
-// NEW VERSION 5.1.0 - Simple content script that just logs
-console.log('🤖 @fred Bot Content Script: VERSION 5.1.0 LOADED!');
+// NEW VERSION 5.2.0 - Simple content script that just logs
+console.log('🤖 @fred Bot Content Script: VERSION 5.2.0 LOADED - CORS Fixed!');
 console.log('This is the NEW version - completely rebuilt!');
 console.log('Page URL:', window.location.href);
 console.log('Hostname:', window.location.hostname);
