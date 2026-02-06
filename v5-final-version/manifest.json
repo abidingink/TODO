@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "@fred Bot V5.1 - NEW",
+  "version": "5.1.0",
+  "description": "Brand new version 5.1.0 - Manual injection with debugging",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "*://*.messenger.com/*",
+    "*://*.facebook.com/*"
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "@fred Bot V5.1 - Manual Control"
+  },
+  
+  "background": {
+    "service_worker": "background.js"
+  }
+}

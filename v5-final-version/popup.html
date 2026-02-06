@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 400px;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #1877f2;
+      font-size: 24px;
+      font-weight: bold;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .version {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+    
+    .status {
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      text-align: center;
+      font-weight: bold;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .status.error {
+      background: #ffeaa7;
+      color: #d63031;
+      border: 1px solid #fdcb6e;
+    }
+    
+    .status.success {
+      background: #55efc4;
+      color: #00b894;
+      border: 1px solid #00cec9;
+    }
+    
+    .status.info {
+      background: #81ecec;
+      color: #0984e3;
+      border: 1px solid #74b9ff;
+    }
+    
+    button {
+      width: 100%;
+      padding: 15px;
+      margin: 10px 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      background: #b2bec3;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .input-group {
+      margin-bottom: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #2d3436;
+      font-size: 14px;
+    }
+    
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #dfe6e9;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 14px;
+      transition: border-color 0.3s ease;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #74b9ff;
+      box-shadow: 0 0 0 3px rgba(116, 185, 255, 0.1);
+    }
+    
+    .debug {
+      margin-top: 20px;
+      padding: 15px;
+      background: #2d3436;
+      color: #00cec9;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      max-height: 200px;
+      overflow-y: auto;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .step-indicator {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding: 10px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .step {
+      flex: 1;
+      text-align: center;
+      padding: 8px;
+      font-size: 12px;
+      color: #636e72;
+      border-bottom: 3px solid #dfe6e9;
+    }
+    
+    .step.active {
+      color: #0984e3;
+      border-bottom-color: #0984e3;
+      font-weight: bold;
+    }
+    
+    .step.completed {
+      color: #00b894;
+      border-bottom-color: #00b894;
+    }
+    
+    .warning-box {
+      background: #ffeaa7;
+      border: 1px solid #fdcb6e;
+      border-radius: 6px;
+      padding: 15px;
+      margin: 15px 0;
+      color: #d63031;
+      font-size: 13px;
+    }
+    
+    .success-box {
+      background: #55efc4;
+      border: 1px solid #00cec9;
+      border-radius: 6px;
+      padding: 15px;
+      margin: 15px 0;
+      color: #00b894;
+      font-size: 13px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">🤖 @fred Bot - NEW VERSION</div>
+  <div class="version">VERSION 5.1.0 - COMPLETELY REBUILT</div>
+  
+  <div id="status" class="status info">🔧 Ready to configure - This is the NEW version!</div>
+  
+  <div class="step-indicator">
+    <div class="step" id="step1">1. Settings</div>
+    <div class="step" id="step2">2. Test</div>
+    <div class="step" id="step3">3. Inject</div>
+    <div class="step" id="step4">4. Enable</div>
+  </div>
+  
+  <div class="warning-box">
+    ⚠️ IMPORTANT: This is a completely new version. Make sure to remove the old extension first!
+  </div>
+  
+  <div class="input-group">
+    <label for="gatewayUrl">🌐 Gateway URL:</label>
+    <input type="text" id="gatewayUrl" placeholder="http://47.236.204.27:18789/">
+  </div>
+  
+  <div class="input-group">
+    <label for="sessionKey">🔑 Session Key:</label>
+    <input type="text" id="sessionKey" placeholder="Enter your session key">
+  </div>
+  
+  <button id="saveSettings">💾 Save Settings</button>
+  <button id="testConnection">🧪 Test Connection</button>
+  <button id="injectBot">🚀 Inject Bot into Current Tab</button>
+  <button id="checkStatus">📊 Check Status</button>
+  
+  <div id="debug" class="debug" style="display: none;">
+    🔍 Debug Log (NEW VERSION):
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
